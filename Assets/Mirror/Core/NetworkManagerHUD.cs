@@ -22,7 +22,7 @@ namespace Mirror
         void OnGUI()
         {
             // If this width is changed, also change offsetX in GUIConsole::OnGUI
-            int width = 300;
+            int width = 750;
 
             GUILayout.BeginArea(new Rect(10 + offsetX, 40 + offsetY, width, 9999));
 

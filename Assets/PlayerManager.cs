@@ -1,0 +1,135 @@
+using Mirror;
+using System.Collections.Generic;
+using UnityEngine;
+using TicTacToe;
+using System.Linq;
+using System;
+
+public class PlayerManager : MonoBehaviour
+{
+    private static PlayerManager _instance;
+
+    Dictionary<NetworkConnectionToClient, Guid> _playerConnectionMapping = new Dictionary<NetworkConnectionToClient, Guid>();
+    Dictionary<Guid, Player> _onlinePlayers = new Dictionary<Guid, Player>();
+
+    #region Name Params
+    HashSet<string> _generatedNames = new HashSet<string>();
+    List<string> _names = new List<string>
+        {
+            "ShadowHunter",
+            "CyberWarrior",
+            "NightWolf",
+            "StormBlaze",
+            "IronFist",
+            "GhostRider",
+            "PixelPirate",
+            "FirePhoenix",
+            "AquaSniper",
+            "BladeMaster",
+            "ThunderStrike",
+            "IceViper",
+            "DarkKnight",
+            "SteelTitan",
+            "WindRanger",
+            "SkyGuardian",
+            "FlameBender",
+            "CrystalMage",
+            "StormBreaker",
+            "LightningFury",
+            "DragonSlayer",
+            "SilentNinja",
+            "MysticSage",
+            "PhantomAssassin",
+            "ArcaneWarden"
+        };
+    #endregion
+
+    private void Awake()
+    {
+        if(_instance != null && _instance != this)
+            Destroy(_instance);
+        else
+            _instance = this;
+
+    }
+
+    //public static void AddPlayerToOnlinePool(NetworkConnectionToClient connectionToClient, PlayerInfo playerInfo)
+    //{
+    //    playerInfo.playerPreference.mode = GameMode.None;
+    //    playerInfo.playerPreference.gridTier = GridTier.None;
+    //    playerInfo.playerState = PlayerState.Online;
+
+    //    _onlinePlayers.Add(connectionToClient, playerInfo); 
+    //}
+
+    [ServerCallback]
+    public static void OnPlayerConnect(NetworkConnectionToClient clientConnection)
+    {
+        Guid playerID = Guid.NewGuid();
+        Player player = new Player { playerid = playerID, connection = clientConnection, name = PlayerManager.GeneratePlayerName(), state = PlayerState.Online };
+        PlayerManager._instance._onlinePlayers.Add(playerID, player);
+        PlayerManager._instance._playerConnectionMapping.Add(clientConnection, playerID);
+    }
+
+
+    [ServerCallback]
+    // For player state management.
+    public static void AddPlayerToLobby(NetworkConnectionToClient clientConnection, Lobby lobby)
+    {
+        if (!_instance._playerConnectionMapping.ContainsKey(clientConnection))
+            return;
+
+        PlayerManager manager = PlayerManager._instance;
+        Player player = manager._onlinePlayers[manager._playerConnectionMapping[clientConnection]];
+
+        if (player.state != PlayerState.Online)
+        {   
+            Debug.LogWarning("Request to add player: Player not in online lobby");
+            return;
+        }
+
+        switch (lobby)
+        {
+            case Lobby.QuickLobby:
+                player.state = PlayerState.QuickJoinLobby;
+                LobbyManager.AddPlayerToLobby(clientConnection);
+                break;
+            case Lobby.RoomLobby:
+                player.state = PlayerState.RoomLobby;
+                RoomManager.AddPlayerToLobby(clientConnection);
+                break;
+        }
+
+        Debug.Log($"Added player to lobby: {player.state}");
+
+    }
+
+    public static Player GetPlayerFromConnection(NetworkConnectionToClient clientConnection) => _instance._onlinePlayers[_instance._playerConnectionMapping[clientConnection]];
+
+
+    #region Helping Function
+    private static string GeneratePlayerName()
+    {
+        string name =  _instance._names.FirstOrDefault(name => !_instance._generatedNames.Contains(name));
+        _instance._generatedNames.Add(name);
+        return name;
+    }
+    #endregion
+
+
+    //public static void AddPlayerToLobby(NetworkConnectionToClient connection, Lobby lobby)
+    //{
+    //    PlayerInfo playerInfo = _onlinePlayers[connection];
+
+    //    if (playerInfo.playerState != PlayerState.Online)
+    //        return;
+
+    //    if(lobby == Lobby.QuickLobby)
+    //    {
+    //        playerInfo.playerState = PlayerState.QuickJoinLobby;
+    //        _onlinePlayers[connection] = playerInfo;
+    //        LobbyManager.AddPlayerToLobby(connection, playerInfo.)
+    //    }
+
+    //}
+}

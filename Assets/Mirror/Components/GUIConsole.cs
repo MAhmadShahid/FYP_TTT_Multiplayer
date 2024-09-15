@@ -110,7 +110,7 @@ namespace Mirror
             if (!visible) return;
 
             // If this offset is changed, also change width in NetworkManagerHUD::OnGUI
-            int offsetX = 300 + 20;
+            int offsetX = 750 + 20;
 
             GUILayout.BeginArea(new Rect(offsetX, offsetY, Screen.width - offsetX - 10, height));
 
