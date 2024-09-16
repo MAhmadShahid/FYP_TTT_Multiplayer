@@ -4,7 +4,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using TicTacToe;
-using UnityEditorInternal;
 using UnityEngine;
 
 public class LobbyManager : MonoBehaviour

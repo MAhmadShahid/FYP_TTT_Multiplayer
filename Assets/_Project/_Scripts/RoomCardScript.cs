@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using TicTacToe;
 using TMPro;
-using UnityEditor.SceneTemplate;
 using UnityEngine;
 
 public class RoomCardScript : MonoBehaviour

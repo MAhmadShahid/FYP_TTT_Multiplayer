@@ -9,6 +9,8 @@ public class PlayerManager : MonoBehaviour
 {
     private static PlayerManager _instance;
 
+    Player _localPlayer;
+
     Dictionary<NetworkConnectionToClient, Guid> _playerConnectionMapping = new Dictionary<NetworkConnectionToClient, Guid>();
     Dictionary<Guid, Player> _onlinePlayers = new Dictionary<Guid, Player>();
 
@@ -62,11 +64,13 @@ public class PlayerManager : MonoBehaviour
     //    _onlinePlayers.Add(connectionToClient, playerInfo); 
     //}
 
+    #region Server Callbacks
+
     [ServerCallback]
     public static void OnPlayerConnect(NetworkConnectionToClient clientConnection)
     {
         Guid playerID = Guid.NewGuid();
-        Player player = new Player { playerid = playerID, connection = clientConnection, name = PlayerManager.GeneratePlayerName(), state = PlayerState.Online };
+        Player player = new Player (playerID,clientConnection,PlayerManager.GeneratePlayerName(),PlayerState.Online );
         PlayerManager._instance._onlinePlayers.Add(playerID, player);
         PlayerManager._instance._playerConnectionMapping.Add(clientConnection, playerID);
     }
@@ -104,8 +108,50 @@ public class PlayerManager : MonoBehaviour
 
     }
 
+    [ServerCallback]
     public static Player GetPlayerFromConnection(NetworkConnectionToClient clientConnection) => _instance._onlinePlayers[_instance._playerConnectionMapping[clientConnection]];
+    [ServerCallback]
+    public static PlayerStruct GetPlayerStructureFromConnection(NetworkConnectionToClient clientConnection)
+    { 
+        Player playerObject = _instance._onlinePlayers[_instance._playerConnectionMapping[clientConnection]];
+        return new PlayerStruct
+        {
+            playerid = playerObject.playerid,
+            name = playerObject.name,
+            state = playerObject.state
+        };
+    }
 
+
+    #endregion
+
+    #region Client Callbacks
+    [ClientCallback]
+    public static void AddPlayerOnClient(PlayerStruct player)
+    {
+        Debug.Log("Client: Adding player on client");
+        _instance._localPlayer = new Player(player, null);
+    }
+    
+
+    [ClientCallback]
+    public static PlayerStruct GetLocalPlayerStructure()
+    {
+        if (_instance._localPlayer == null)
+        {
+            Debug.Log("Client: Player instance null on client");
+            return new PlayerStruct();
+        }
+            
+
+        return new PlayerStruct {
+            playerid = _instance._localPlayer.playerid,
+            name = _instance._localPlayer.name,
+            state = _instance._localPlayer.state
+        };
+
+    }
+    #endregion
 
     #region Helping Function
     private static string GeneratePlayerName()

@@ -28,7 +28,11 @@ public class MessageHandler : MonoBehaviour
         switch(message.operation)
         {
             case PlayerHandlingOperation.AddToLobby:
-                PlayerManager.AddPlayerToLobby(connection, message.lobbyType); 
+                PlayerManager.AddPlayerToLobby(connection, message.lobbyType);
+                break;
+            case PlayerHandlingOperation.RequestPlayerInfo:
+                Debug.Log("Server: Sending player's information");
+                connection.Send(new ClientPlayerMessage { operation = ClientPlayerOperation.Added, player = PlayerManager.GetPlayerStructureFromConnection(connection) });
                 break;
         }
     }
@@ -92,6 +96,7 @@ public class MessageHandler : MonoBehaviour
     {
         NetworkClient.RegisterHandler<ClientMatchMessage>(OnClientMatchMessageReceived);
         NetworkClient.RegisterHandler<ClientRoomMessage>(OnClientRoomMessageReceived);
+        NetworkClient.RegisterHandler<ClientPlayerMessage>(OnClientPlayerMessageRecieved);
     }
 
     [ClientCallback]
@@ -128,8 +133,22 @@ public class MessageHandler : MonoBehaviour
                 _roomManager.RecieveRoomListing(message.roomsInfo);
                 break;
             case ClientRoomOperation.Created:
-                Debug.Log("Your room was created");
+                Debug.Log("Client: Room created!");
+                _roomManager.InitializeRoomView(message.roomsInfo[0], true);
                 break;
+        }
+    }
+
+    [ClientCallback]
+    public void OnClientPlayerMessageRecieved(ClientPlayerMessage message)
+    {
+        switch (message.operation)
+        {
+            case ClientPlayerOperation.Added:
+                Debug.Log("Client: Player added on server");
+                PlayerManager.AddPlayerOnClient(message.player);
+                break;
+            
         }
     }
     

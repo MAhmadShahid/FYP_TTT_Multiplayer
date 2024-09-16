@@ -54,7 +54,32 @@ namespace TicTacToe
         public NetworkConnectionToClient connection;
         public string name;
         public PlayerState state;
+
+        public Player(Guid playerid, NetworkConnectionToClient connection, string name, PlayerState state)
+        {
+            this.playerid = playerid;
+            this.connection = connection;
+            this.name = name;
+            this.state = state;
+        }
+
+        public Player(PlayerStruct player, NetworkConnectionToClient connection)
+        {
+            this.playerid =    player.playerid;
+            this.connection =  connection;
+            this.name =        player.name;
+            this.state =       player.state;
+        }
     }
+
+    [Serializable]
+    public struct PlayerStruct
+    {
+        public Guid playerid;
+        public string name;
+        public PlayerState state;
+    }
+
 
     [Serializable]
     public struct PlayerInfo
@@ -86,7 +111,7 @@ namespace TicTacToe
         MatchSearching,
         Start,
         RoomListing,
-        RoomView          
+        RoomView
     }
 
     #endregion
@@ -99,13 +124,28 @@ namespace TicTacToe
     {
         None,
         AddToLobby,
-        RemoveFromLobby
+        RemoveFromLobby,
+        RequestPlayerInfo
     }
-    public struct PlayerHandlingMessage: NetworkMessage
+
+    public enum ClientPlayerOperation
+    {
+        None,
+        Added
+    }
+
+    public struct PlayerHandlingMessage : NetworkMessage
     {
         public PlayerHandlingOperation operation;
         public Lobby lobbyType;
     }
+
+    public struct ClientPlayerMessage : NetworkMessage
+    {
+        public ClientPlayerOperation operation;
+        public PlayerStruct player;
+    }
+
     #endregion
 
     #region Match Messages
@@ -165,7 +205,7 @@ namespace TicTacToe
     }
 
 
-
+    [Serializable]
     public enum ClientRoomOperation
     {
         None,

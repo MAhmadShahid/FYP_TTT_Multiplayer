@@ -60,6 +60,7 @@ public class MyNetworkManager : NetworkManager
     {
         base.OnStartClient();
         _messageHandler.RegisterAllClientHandlers();
+        _messageHandler.SendPlayerHandleMessage(Lobby.None, PlayerHandlingOperation.RequestPlayerInfo);
         _canvasController.OnStartClient();
     }
 
