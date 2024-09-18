@@ -1,8 +1,8 @@
-using System.Collections;
-using System.Collections.Generic;
+
 using UnityEngine;
 using Mirror;
 using TicTacToe;
+using TMPro;
 
 public class MyNetworkManager : NetworkManager
 {
@@ -17,12 +17,16 @@ public class MyNetworkManager : NetworkManager
     [SerializeField]
     bool _distributionUnit = false;
 
+    [SerializeField]
+    TextMeshProUGUI _addressText;
+
     #region Start & Stop Callbacks
 
     public override void Awake()
     {
+        Debug.Log($"Awake Before: Mode = {mode}");
 #if UNITY_EDITOR
-        networkAddress = "localhost";
+        networkAddress = "192.168.18.200";
         _hud.enabled = true;
 #else
         if(_distributionUnit)
@@ -31,22 +35,27 @@ public class MyNetworkManager : NetworkManager
             networkAddress = "192.168.18.200";
         _hud.enabled = false;
 #endif
+
+        _addressText.text = $"Network Address: {networkAddress} Port: 7777";
         base.Awake();
+
+        Debug.Log($"Awake After: Mode = {mode}");
     }
 
     public override void Start()
     {
+        Debug.Log($"Start Before: Mode = {mode}");
         base.Start();
-#if UNITY_EDITOR
-#else
-        if (mode != NetworkManagerMode.ServerOnly)
-            StartClient();
-#endif
+        Debug.Log($"Start After: Mode = {mode}");
     }
+
+
 
     public override void OnStartServer()
     {
+        Debug.Log($"OnStartServer Before: Mode = {mode}");
         base.OnStartServer();
+        Debug.Log($"OnStartServer After: Mode = {mode}");
         _lobbyManager.OnStartServer();
         _messageHandler.RegisterAllServerHandlers();
     }
@@ -56,13 +65,43 @@ public class MyNetworkManager : NetworkManager
         PlayerManager.OnPlayerConnect(conn);
     }
 
-    public override void OnStartClient()
+    public override void OnServerDisconnect(NetworkConnectionToClient conn)
     {
-        base.OnStartClient();
-        _messageHandler.RegisterAllClientHandlers();
-        _messageHandler.SendPlayerHandleMessage(Lobby.None, PlayerHandlingOperation.RequestPlayerInfo);
-        _canvasController.OnStartClient();
+        base.OnServerDisconnect(conn);
+        PlayerManager.OnPlayerDisconnect(conn); 
     }
 
-#endregion
+    public override void OnStartClient()
+    {
+        Debug.Log($"OnStartClient Before: Mode = {mode}");
+        Debug.Log("On client start called");
+        base.OnStartClient();
+        Debug.Log($"OnStartClient After: Mode = {mode}");
+        _messageHandler.RegisterAllClientHandlers();
+    }
+
+    public override void OnClientConnect()
+    {
+        base.OnClientConnect();
+        _messageHandler.SendPlayerHandleMessage(Lobby.None, PlayerHandlingOperation.RequestPlayerInfo);
+        _canvasController.OnClientConnect();
+    }
+
+    public void InitiateConnectionFromClient()
+    {
+        if (mode == NetworkManagerMode.ServerOnly)
+            return;
+
+        StartClient();
+        _canvasController.InitiateConnectionFromClient();
+    }
+
+    public override void OnClientDisconnect()
+    {
+        base.OnClientDisconnect();
+        _canvasController.OnClientDisconnect();
+        Debug.Log("Disconnected from server");
+    }
+
+    #endregion
 }

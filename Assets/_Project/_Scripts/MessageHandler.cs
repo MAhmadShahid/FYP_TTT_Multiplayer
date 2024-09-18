@@ -1,6 +1,7 @@
 using Mirror;
 using UnityEngine;
 using TicTacToe;
+using System;
 
 public class MessageHandler : MonoBehaviour
 {
@@ -33,6 +34,9 @@ public class MessageHandler : MonoBehaviour
             case PlayerHandlingOperation.RequestPlayerInfo:
                 Debug.Log("Server: Sending player's information");
                 connection.Send(new ClientPlayerMessage { operation = ClientPlayerOperation.Added, player = PlayerManager.GetPlayerStructureFromConnection(connection) });
+                break;
+            case PlayerHandlingOperation.RemoveFromLobby:
+                PlayerManager.RemovePlayerFromLobby(connection);
                 break;
         }
     }
@@ -81,7 +85,7 @@ public class MessageHandler : MonoBehaviour
         Debug.Log($"Player Connection: {connection}");
         Debug.Log($"Player Mode Pref: {message.matchInfo.mode} \n Player Tier Pref: {message.matchInfo.gridTier}");
 
-        _lobbyManager.AddPlayerToWaiting(connection, message.matchInfo);
+        _lobbyManager.AddPlayerToQueue(connection, message.matchInfo);
         connection.Send(new ClientMatchMessage { clientSideOperation = ClientMatchOperation.Matchmaking });
     }
 
@@ -113,7 +117,7 @@ public class MessageHandler : MonoBehaviour
             case ClientMatchOperation.Reset:
                 {
                     Debug.Log("Client has been removed from matchmaking");
-                    _canvasController.InitializeCanvas();
+                    _canvasController.InitializeCanvasOnline();
                     break;
                 }
             case ClientMatchOperation.Start:
@@ -135,6 +139,9 @@ public class MessageHandler : MonoBehaviour
             case ClientRoomOperation.Created:
                 Debug.Log("Client: Room created!");
                 _roomManager.InitializeRoomView(message.roomsInfo[0], true);
+                break;
+            case ClientRoomOperation.Update:
+                    
                 break;
         }
     }
@@ -172,13 +179,14 @@ public class MessageHandler : MonoBehaviour
     public void OnClientStartMatch(PlayerInfo[] playersInfo)
     {
         _canvasController.ShowStartScreen(true, playersInfo);
+
     }
 
     [ClientCallback]
-    public void SendRoomMessageToServer(ServerRoomOperation op)
+    public void SendRoomMessageToServer(ServerRoomOperation op, Guid roomID)
     {
         Debug.Log($"Sending message to server: {op}");
-        NetworkClient.Send(new ServerRoomMessage { operation = op });
+        NetworkClient.Send(new ServerRoomMessage { operation = op, roomID = roomID });
 
     }
 

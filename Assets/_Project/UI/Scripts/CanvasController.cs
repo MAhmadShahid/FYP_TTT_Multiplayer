@@ -50,14 +50,16 @@ namespace TicTacToe
         #endregion
 
 
-        public void ResetCanvasToStart()
-        {
 
-        }
 
         #region Helping Functions
+        public void InitializeCanvasOffline()
+        {
+            gameObject.SetActive(true);
+            ShowScreen(OnlineScreens.Main);
+        }
 
-        public void InitializeCanvas()
+        public void InitializeCanvasOnline()
         {
             // resetting all states
             _gameMode = GameMode.None;
@@ -67,7 +69,7 @@ namespace TicTacToe
             _highTierToggle.isOn = false;
             
 
-            ShowScreen(OnlineScreens.Main);
+            ShowScreen(OnlineScreens.OnlineLobby);
         }
 
         public void ShowScreen(OnlineScreens screenName)
@@ -102,6 +104,14 @@ namespace TicTacToe
             
         }
 
+        public void InitializeGameMode()
+        {
+            _gameMode = GameMode.None;
+            _gridTier = GridTier.None;
+            
+            ShowScreen(OnlineScreens.GameMode);
+        }
+
         #endregion
 
         #region Online Lobby Button Calls
@@ -109,7 +119,8 @@ namespace TicTacToe
         public void OnOnlineLobbySelected()
         {
             _messageHandler.SendPlayerHandleMessage(Lobby.QuickLobby, PlayerHandlingOperation.AddToLobby);
-            ShowScreenIntegerNumbering(3);
+
+            InitializeGameMode();
         }
 
         public void OnRoomOptionSelected()
@@ -169,16 +180,30 @@ namespace TicTacToe
             ShowScreen(OnlineScreens.MatchSearching);
         }
 
+        public void OnQuitLobby()
+        {
+            _messageHandler.SendPlayerHandleMessage(Lobby.None, PlayerHandlingOperation.RemoveFromLobby);
+            ShowScreen(OnlineScreens.OnlineLobby);
+        }
+
 
         #endregion
 
-       
+        #region Mirror:NetworkManager Callbacks
 
-        #region Server Start & Stop
-        public void OnStartClient()
+        public void InitiateConnectionFromClient()
         {
-            gameObject.SetActive(true);
-            InitializeCanvas();
+            ShowScreen(OnlineScreens.Connecting);
+        }
+
+        public void OnClientConnect()
+        {
+            InitializeCanvasOnline();
+        }
+
+        public void OnClientDisconnect()
+        {
+            InitializeCanvasOffline();
         }
 
         #endregion
@@ -207,6 +232,13 @@ namespace TicTacToe
             }
 
             StartCoroutine(MyCoroutine(() => { _currentActiveScreen.screenObject.SetActive(false); }, 5));
+        }
+        #endregion
+
+        #region Unity Callbacks
+        private void Start()
+        {
+            InitializeCanvasOffline();
         }
         #endregion
 

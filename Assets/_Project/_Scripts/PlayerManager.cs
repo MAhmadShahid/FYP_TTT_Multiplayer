@@ -18,19 +18,19 @@ public class PlayerManager : MonoBehaviour
     HashSet<string> _generatedNames = new HashSet<string>();
     List<string> _names = new List<string>
         {
-            "ShadowHunter",
-            "CyberWarrior",
-            "NightWolf",
-            "StormBlaze",
-            "IronFist",
-            "GhostRider",
-            "PixelPirate",
-            "FirePhoenix",
-            "AquaSniper",
-            "BladeMaster",
-            "ThunderStrike",
-            "IceViper",
-            "DarkKnight",
+            "Osman",
+            "Elon",
+            "Trump",
+            "JoeBiden",
+            "Ertugral",
+            "Shapper",
+            "Excalibur",
+            "RonaldoSUI",
+            "ProNigger",
+            "Batman",
+            "Chapri",
+            "Pedo",
+            "MarkZingerBurger",
             "SteelTitan",
             "WindRanger",
             "SkyGuardian",
@@ -70,11 +70,45 @@ public class PlayerManager : MonoBehaviour
     public static void OnPlayerConnect(NetworkConnectionToClient clientConnection)
     {
         Guid playerID = Guid.NewGuid();
-        Player player = new Player (playerID,clientConnection,PlayerManager.GeneratePlayerName(),PlayerState.Online );
+        Player player = new Player (playerID, clientConnection, PlayerManager.GeneratePlayerName(), PlayerState.Online);
         PlayerManager._instance._onlinePlayers.Add(playerID, player);
         PlayerManager._instance._playerConnectionMapping.Add(clientConnection, playerID);
+
+        Debug.Log("Player Connected To Server: ");
+        Debug.Log($"Name: {player.name}; Connection: {clientConnection}");
     }
 
+    [ServerCallback]
+    public static void OnPlayerDisconnect(NetworkConnectionToClient clientConnection)
+    {
+        Guid playerID = _instance._playerConnectionMapping[clientConnection];
+
+        if(playerID == null)
+        {
+            Debug.Log("Disconnecting: User doesn't exist in online player pool");
+            return;
+        }    
+
+        Player player = PlayerManager._instance._onlinePlayers[playerID];
+
+        if(player == null)
+        {
+            Debug.Log("Disconnecting: User Id exists, but player object doesn't");
+            return;
+        }
+
+        if(player.state != PlayerState.Online)
+            RemovePlayerFromLobby(clientConnection);
+
+        Debug.Log($"Disconnecting Player: {player.name}; Connection: {clientConnection}");
+        
+        // wrap up player from this script
+        _instance._generatedNames.Remove(player.name);
+        _instance._playerConnectionMapping.Remove(clientConnection);
+        _instance._onlinePlayers.Remove(playerID);
+
+        
+    }
 
     [ServerCallback]
     // For player state management.
@@ -109,6 +143,41 @@ public class PlayerManager : MonoBehaviour
     }
 
     [ServerCallback]
+    // For player state management.
+    public static void RemovePlayerFromLobby(NetworkConnectionToClient clientConnection)
+    {
+        if (!_instance._playerConnectionMapping.ContainsKey(clientConnection))
+            return;
+
+        PlayerManager manager = PlayerManager._instance;
+        Player player = manager._onlinePlayers[manager._playerConnectionMapping[clientConnection]];
+
+        if (player.state == PlayerState.Online)
+        {
+            Debug.LogWarning("Removing: Player still in online pool");
+            return;
+        }
+
+        Lobby lobby = player.state == PlayerState.QuickJoinLobby ? Lobby.QuickLobby : Lobby.RoomLobby;
+        player.state = PlayerState.Online;
+
+        switch (lobby)
+        {
+            case Lobby.QuickLobby:
+                LobbyManager.RemovePlayerFromLobby(clientConnection, true);
+                break;
+            case Lobby.RoomLobby:
+                RoomManager.Instance.RemovePlayerFromLobby(clientConnection);
+                break;
+        }
+
+
+
+        Debug.Log($"Added player to lobby: {player.state}");
+
+    }
+
+    [ServerCallback]
     public static Player GetPlayerFromConnection(NetworkConnectionToClient clientConnection) => _instance._onlinePlayers[_instance._playerConnectionMapping[clientConnection]];
     [ServerCallback]
     public static PlayerStruct GetPlayerStructureFromConnection(NetworkConnectionToClient clientConnection)
@@ -122,6 +191,7 @@ public class PlayerManager : MonoBehaviour
         };
     }
 
+ 
 
     #endregion
 

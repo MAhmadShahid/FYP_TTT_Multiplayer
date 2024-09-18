@@ -8,6 +8,10 @@ namespace TicTacToe
 {
     public class SlotScript : MonoBehaviour
     {
+        PlayerStruct _player;
+        bool _playerAssigned = false;
+        bool _isRoomOwner = false;
+
         // player banner references
         [SerializeField] GameObject _playerBanner;
         [SerializeField] Image _playerAvatar;
@@ -29,11 +33,20 @@ namespace TicTacToe
             _notAvailablePanel.SetActive(!isSlotValid);
         }
 
-        public void AddPlayer(string playerName, bool isRoomOwner)
+        public void AddPlayer(PlayerStruct player, bool isRoomOwner)
+        {
+            _player = player;
+            _playerAssigned = true;
+            _isRoomOwner = isRoomOwner;
+
+            UpdatePlayerUI();
+        }
+
+        public void UpdatePlayerUI()
         {
             Debug.Log("Client: (SlotScript) Adding player");
-            _playerName.text = playerName;
-            _roomOwner.SetActive(isRoomOwner);
+            _playerName.text = _player.name;
+            _roomOwner.SetActive(_isRoomOwner);
 
             _playerBanner.SetActive(true);
             _playerNotAvailablePanel.SetActive(false);

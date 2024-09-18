@@ -3,6 +3,7 @@ using Org.BouncyCastle.Bcpg;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using TicTacToe;
 using UnityEngine;
 
@@ -15,6 +16,7 @@ public class LobbyManager : MonoBehaviour
     internal Dictionary<Guid, HashSet<NetworkConnectionToClient>> _matches = new Dictionary<Guid, HashSet<NetworkConnectionToClient>>();
 
     System.Random _random = new System.Random();
+    LinkedList<NetworkConnectionToClient> queue = new LinkedList<NetworkConnectionToClient>();
 
     #region Testing References
     [SerializeField]
@@ -53,6 +55,7 @@ public class LobbyManager : MonoBehaviour
 
         _queues.Add(GameMode.Classic, tempDict1);
         _queues.Add(GameMode.Blitz, tempDict2);
+
 
     }
 
@@ -149,14 +152,34 @@ public class LobbyManager : MonoBehaviour
 
     void ExtractPlayerForMatch(GameMode mode, int numberofPlayers, Queue<NetworkConnectionToClient> queue)
     {
+        // in case of any race condition (queues get rebuilt upon player disconnection)
+        if (numberofPlayers > queue.Count)
+            return;
+
         Guid matchID = Guid.NewGuid();
-        _matches[matchID] = new HashSet<NetworkConnectionToClient>();
+        _matches.Add(matchID, new HashSet<NetworkConnectionToClient>());
+
         
 
         for (int playerIndex = 0; playerIndex < numberofPlayers; playerIndex++)
         {
-            NetworkConnectionToClient playerConnection = queue.Dequeue();
+            NetworkConnectionToClient playerConnection;
+            
+            if(!queue.TryDequeue(out playerConnection))
+            {
+                Debug.Log("Race Condition: Queue has less number of player than required. This may be caused when the last player has disconnected (queues get rebuilt upon player disconnection)");
+                AbortMatch(matchID);
+                return;
+            }
+
             PlayerInfo player = _lobby[playerConnection];
+
+            if(player.playerState == PlayerState.Leaving)
+            {
+                AbortMatch(matchID);
+                return;
+            }
+
             player.playerState = PlayerState.UndergoingMatchmaking;
             _matches[matchID].Add(playerConnection);
 
@@ -174,7 +197,17 @@ public class LobbyManager : MonoBehaviour
         List<PlayerInfo> playerList = new List<PlayerInfo>();
 
         foreach (var conn in _matches[matchID])
-            playerList.Add(_lobby[conn]);
+        {
+            PlayerInfo info = _lobby[conn];
+
+            if (info.playerState == PlayerState.Leaving)
+            {
+                AbortMatch(matchID);
+                return;
+            }
+            playerList.Add(info);
+        }
+            
 
         foreach(NetworkConnectionToClient playerConnection in _matches[matchID])
         {
@@ -195,6 +228,18 @@ public class LobbyManager : MonoBehaviour
     }
 
     [ServerCallback]
+    void AbortMatch(Guid matchID)
+    {
+        HashSet<NetworkConnectionToClient> clientsInMatch = _matches[matchID];
+        _matches.Remove(matchID);
+
+        foreach (var client in clientsInMatch)
+        {
+            AddPlayerToQueue(client, _lobby[client].playerPreference);
+        }
+    }
+
+    [ServerCallback]
     public static void AddPlayerToLobby(NetworkConnectionToClient connection)
     {
         if (!_lobby.ContainsKey(connection))
@@ -205,20 +250,47 @@ public class LobbyManager : MonoBehaviour
     }
 
     [ServerCallback]
-    public void AddPlayerToWaiting(NetworkConnectionToClient connection, OnlineMatchInfo onlineMatchInfo)
+    public static void RemovePlayerFromLobby(NetworkConnectionToClient connection, bool disconnecting = false)
+    {
+        if (!_lobby.ContainsKey(connection))
+        {
+            Debug.Log("Player isn't in quick join lobby");
+            return;
+        }
+        
+        // changing player state
+        PlayerInfo playerInfo = _lobby[connection];
+        playerInfo.playerState = PlayerState.Leaving;
+
+        Debug.Log($"Removing From Quick Join: {connection}");
+
+        _lobby.Remove(connection);
+
+        if(playerInfo.playerPreference.mode != GameMode.None && playerInfo.playerPreference.gridTier != GridTier.None)
+            _instance._queues[playerInfo.playerPreference.mode][playerInfo.playerPreference.gridTier] = new Queue<NetworkConnectionToClient>(
+                _instance._queues[playerInfo.playerPreference.mode][playerInfo.playerPreference.gridTier]
+                .Where(s => s != connection)
+            );
+
+
+    }
+
+    [ServerCallback]
+    public void AddPlayerToQueue(NetworkConnectionToClient connection, OnlineMatchInfo onlineMatchInfo)
     {
         if (_lobby.ContainsKey(connection))
         {
             PlayerInfo playerInfo = _lobby[connection];
             playerInfo.playerPreference = new OnlineMatchInfo { mode = onlineMatchInfo.mode, gridTier = onlineMatchInfo.gridTier };
-            playerInfo.playerState = PlayerState.UndergoingMatchmaking;
+            playerInfo.playerState = PlayerState.Inqueue;
             _lobby[connection] = playerInfo;
 
             _queues[playerInfo.playerPreference.mode][playerInfo.playerPreference.gridTier].Enqueue(connection);
+
+            Debug.Log($"Added Connection: {connection} Mode: {onlineMatchInfo.mode} Tier: {onlineMatchInfo.gridTier}");
         }
         else
-            Debug.Log("Player already waiting");
-
+            Debug.Log("Player already in queue");
     }
 
     public bool RemovePlayerFromWaiting(NetworkConnectionToClient connection)

@@ -42,9 +42,11 @@ namespace TicTacToe
         Online,
         QuickJoinLobby,
         UndergoingMatchmaking,
+        Inqueue,
         RoomLobby,
         InRoom,
-        Playing
+        Playing,
+        Leaving
     }
 
     [Serializable]
@@ -111,7 +113,8 @@ namespace TicTacToe
         MatchSearching,
         Start,
         RoomListing,
-        RoomView
+        RoomView,
+        Connecting
     }
 
     #endregion
@@ -184,12 +187,14 @@ namespace TicTacToe
     public struct ServerRoomMessage : NetworkMessage
     {
         public ServerRoomOperation operation;
+        public Guid roomID;
     }
 
     public struct ClientRoomMessage : NetworkMessage
     {
         public ClientRoomOperation roomOperation;
         public Room[] roomsInfo;
+        public PlayerStruct[] playerInfos; 
     }
 
     public struct Room
@@ -234,6 +239,7 @@ namespace TicTacToe
     {
         public GameMode mode;
         public GridTier gridTier;
+        public bool online;
     }
 
     [Serializable]

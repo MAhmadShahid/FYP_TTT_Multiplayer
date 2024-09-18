@@ -1,18 +1,17 @@
 using Mirror;
 using System;
 using System.Collections.Generic;
-using System.Collections;
 using System.Linq;
 using TicTacToe;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UIElements;
+using UnityEngine.UI;
 
 public class RoomManager : MonoBehaviour
 {
     public static RoomManager Instance { get; private set; }
 
-
+    Color selectedColor = new Color(195, 121, 0);
 
     #region References
     [SerializeField] CanvasController _canvasController;
@@ -20,14 +19,18 @@ public class RoomManager : MonoBehaviour
 
     // Room Listing UI References
     [SerializeField] TMP_Dropdown _gameModeDrop, _gridSizeDrop;
-    [SerializeField] GameObject _roomCardPrefab;
-    [SerializeField] GameObject _noRoomScreen;
-    [SerializeField] GameObject _roomContentContainer;
+    [SerializeField] GameObject _roomCardPrefab, _noRoomScreen, _roomContentContainer, _joinButton;
+
+
+    [SerializeField] ToggleGroup _toggleGroup;
+    List<Toggle> _toggles = new List<Toggle>();
 
     // Room View References
     [SerializeField] GameObject _roomSlotPrefab; 
     [SerializeField] Transform _slotGridContainer;
     [SerializeField] TextMeshProUGUI _roomTitle;
+
+    [SerializeField] TextMeshProUGUI _gameMode, _gridSize, _participants;
     #endregion
 
     #region Variables
@@ -38,20 +41,19 @@ public class RoomManager : MonoBehaviour
     Dictionary<Guid, HashSet<NetworkConnectionToClient>> _roomConnections = new Dictionary<Guid, HashSet<NetworkConnectionToClient>>();
 
     HashSet<NetworkConnectionToClient> _subscribedRoomInfoClients = new HashSet<NetworkConnectionToClient>();
-    
+
 
     // Room Listing UI Variables
+    Toggle _currentActiveToggle = null;
     int _currentGameModeFilter = 0, _currentGridSizeFilter = 0;
     int[] gridSizeMapping = { 0, 3, 5, 7, 9 };
 
     // Room View UI Variables
     bool _isRoomOwner = false;
-    GameObject[] _slots = new GameObject[9];
+    SlotScript[] _slots = new SlotScript[9];
+
 
     #endregion
-
-
-
 
     #region ServerCallbacks
 
@@ -96,6 +98,26 @@ public class RoomManager : MonoBehaviour
     }
 
     [ServerCallback]
+    public void OnServerAddPlayerToRoom(Guid roomID, NetworkConnectionToClient clientConnection)
+    {
+        if (!_openRooms.ContainsKey(roomID))
+            return;
+
+        Room roomToJoin = _openRooms[roomID];
+        if (roomToJoin.currentPlayerCount >= roomToJoin.totalPlayersAllowed)
+        {
+            Debug.Log($"Player requested to join full room. Room = {roomID}; Connection = {clientConnection}");
+            return;
+        }
+
+        roomToJoin.currentPlayerCount++;
+        _roomConnections[roomID].Add(clientConnection);
+
+        SendUpdatedRoomInfo(roomID);    
+        SendClientList();
+    }
+
+    [ServerCallback]
     public void SendClientList(NetworkConnectionToClient connection = null)
     {
         Room[] rooms = _openRooms.Select(key => key.Value).ToArray();
@@ -107,6 +129,47 @@ public class RoomManager : MonoBehaviour
         else
             foreach(var subsciber in _subscribedRoomInfoClients)
                 subsciber.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.RefreshList, roomsInfo = rooms });
+    }
+
+    [ServerCallback]
+    public void SendUpdatedRoomInfo(Guid roomID)
+    {
+        List<PlayerStruct> participants = new List<PlayerStruct>();
+
+        foreach(NetworkConnectionToClient client in _roomConnections[roomID])
+            participants.Add(PlayerManager.GetPlayerStructureFromConnection(client));
+
+        Room[] roomsInfo = new Room[1];
+        roomsInfo[0] = _openRooms[roomID];
+
+        foreach(NetworkConnectionToClient client in _roomConnections[roomID])
+            client.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Update , roomsInfo = roomsInfo, playerInfos = participants.ToArray() });
+    }
+
+    [ServerCallback]
+    public void RemovePlayerFromLobby(NetworkConnectionToClient clientConnection, bool disconnection = false)
+    {
+        _subscribedRoomInfoClients.Remove(clientConnection);
+
+        foreach(var room  in _roomConnections)
+        {
+            if (room.Value.Contains(clientConnection))
+                RemovePlayerFromRoom(room.Key, clientConnection);
+        }
+    }
+
+    [ServerCallback]
+    public void RemovePlayerFromRoom(Guid roomid, NetworkConnectionToClient clientConnection)
+    {
+        _roomConnections[roomid].Remove(clientConnection);
+
+        Room currentRoom = _openRooms[roomid];
+        currentRoom.currentPlayerCount--;
+
+        // update players in room view
+
+        // update players in room listing screens
+        SendClientList();
     }
     #endregion
 
@@ -141,6 +204,7 @@ public class RoomManager : MonoBehaviour
             foreach (var card in _roomContentContainer.GetComponentsInChildren<GameObject>())
                 Destroy(card);
 
+        _toggles.Clear();
         _noRoomScreen.SetActive(true);
     }
 
@@ -173,31 +237,73 @@ public class RoomManager : MonoBehaviour
     #endregion
 
     #region Room View
-    public void InitializeRoomView(Room room, bool forOwmer)
+    public void InitializeRoomView(Room room, bool forOwner, PlayerStruct[] participants = null)
     {
         Debug.Log("Client: Initializing Room View");
         Debug.Log($"Client Room Setttings: {room.roomName}, {room.roomId}, {room.gameMode}, {room.gridSize}");
-        Debug.Log($"Is room owner? {forOwmer}");
+        Debug.Log($"Is room owner? {forOwner}");
 
         _localRoom = room;
-        _isRoomOwner = forOwmer;
-        // initializing all the slots
+        _isRoomOwner = forOwner;
+
         for(int slotIndex = 0; slotIndex < 9; slotIndex++)
         {
-            _slots[slotIndex] = Instantiate(_roomSlotPrefab, _slotGridContainer);
-
-            SlotScript slotScript = _slots[slotIndex].GetComponent<SlotScript>();
-            slotScript.InitializeSlot(slotIndex + 1, slotIndex < room.totalPlayersAllowed);
+            _slots[slotIndex] = Instantiate(_roomSlotPrefab, _slotGridContainer).GetComponent<SlotScript>();
         }
+            
 
+        Debug.Log("Room Initialized");
+
+        UpdateRoomView(_localRoom, participants);
+        _canvasController.ShowScreen(OnlineScreens.RoomView);
+    }
+
+    public void UpdateRoomView(Room room, PlayerStruct[] participants = null)
+    {
         if (_isRoomOwner)
         {
             PlayerStruct localPlayer = PlayerManager.GetLocalPlayerStructure();
-            _slots[0].GetComponent<SlotScript>().AddPlayer(localPlayer.name, _isRoomOwner);
+            _slots[0].InitializeSlot(0, true);
+            _slots[0].AddPlayer(localPlayer, _isRoomOwner);
         }
 
-        Debug.Log("Room should have been created");
-        _canvasController.ShowScreen(OnlineScreens.RoomView);
+        int slotCounter = 1;
+
+        if (participants != null)
+        {
+
+            for(int playerIndex = 0; playerIndex > participants.Length; playerIndex++)
+            {
+                if (participants[playerIndex].playerid == room.roomOwner && !_isRoomOwner)
+                {
+                    _slots[0].AddPlayer(participants[playerIndex], _isRoomOwner);
+                    continue;
+                }
+
+                _slots[0].InitializeSlot(slotCounter, slotCounter < room.totalPlayersAllowed);
+                _slots[slotCounter++].AddPlayer(participants[playerIndex], _isRoomOwner);
+            }
+        }
+
+        for (; slotCounter < 9; slotCounter++)
+            _slots[slotCounter].InitializeSlot(slotCounter, slotCounter < room.totalPlayersAllowed);
+
+        UpdateSettingsUI(_localRoom);
+        
+    }
+    
+
+    public void UpdateSettingsUI(Room room)
+    {
+        _gameMode.text = room.gameMode.ToString();
+        _gridSize.text = room.gridSize.ToString();
+        _participants.text = $"{room.totalPlayersAllowed}";
+    }
+
+    // keep in mind for both room owner and other participants
+    public void OnClientLeaveRoom()
+    {
+
     }
     #endregion
 
@@ -230,6 +336,17 @@ public class RoomManager : MonoBehaviour
                 GameObject card = Instantiate(_roomCardPrefab);
                 card.transform.SetParent(_roomContentContainer.transform, false);
 
+                Toggle toggle = card.GetComponentInChildren<Toggle>();
+                toggle.group = _toggleGroup;
+                toggle.onValueChanged.AddListener((bool pressed) =>
+                {
+                    if (pressed)
+                        _localRoom = room;
+
+                    toggle.transform.GetComponent<Image>().color = pressed ? selectedColor : Color.white;
+                    _joinButton.SetActive(pressed);
+                });
+
                 RoomCardScript script = card.GetComponent<RoomCardScript>();
                 script.stats = room;
                 script.SetupUI();
@@ -237,6 +354,11 @@ public class RoomManager : MonoBehaviour
         }
         else
             _noRoomScreen.SetActive(true);
+    }
+
+    public void OnClientJoinButtonPressed()
+    {
+        Debug.Log($"Joining Room: {_localRoom.roomName}");
     }
     #endregion
 
