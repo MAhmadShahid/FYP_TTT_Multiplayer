@@ -18,6 +18,7 @@ public class RoomManager : MonoBehaviour
     [SerializeField] MessageHandler _messageHandler;
 
     // Room Listing UI References
+    [SerializeField] Toggle _hideRoomToggle;
     [SerializeField] TMP_Dropdown _gameModeDrop, _gridSizeDrop;
     [SerializeField] GameObject _roomCardPrefab, _noRoomScreen, _roomContentContainer, _joinButton;
 
@@ -31,6 +32,11 @@ public class RoomManager : MonoBehaviour
     [SerializeField] TextMeshProUGUI _roomTitle;
 
     [SerializeField] TextMeshProUGUI _gameMode, _gridSize, _participants;
+    [SerializeField] Button _gameModeButton, _gridSizeButton, _participantsButton;
+    [SerializeField] List<GameObject> arrows = new List<GameObject>();
+
+    [SerializeField] GameModeSelectionScript _gameModeSelection;
+    [SerializeField] AdvanceSettingsScript _advancedSettings;
     #endregion
 
     #region Variables
@@ -45,11 +51,15 @@ public class RoomManager : MonoBehaviour
 
     // Room Listing UI Variables
     Toggle _currentActiveToggle = null;
+    bool _hideFullRoomFilter = false;
     int _currentGameModeFilter = 0, _currentGridSizeFilter = 0;
     int[] gridSizeMapping = { 0, 3, 5, 7, 9 };
 
     // Room View UI Variables
     bool _isRoomOwner = false;
+
+    GameMode _currentGameMode; int _currentGridSize; int _currentParticipantsCount;
+
     SlotScript[] _slots = new SlotScript[9];
 
 
@@ -199,11 +209,52 @@ public class RoomManager : MonoBehaviour
     {
         _subscribedRoomInfoClients.Remove(clientConnection);
 
-        foreach(var room  in _roomConnections)
+        foreach(var room in _roomConnections)
         {
             if (room.Value.Contains(clientConnection))
-                OnServerRemovePlayerFromRoom( clientConnection);
+                OnServerRemovePlayerFromRoom(clientConnection);
         }
+    }
+
+    [ServerCallback]
+    public void OnServerChangeRoomSettings(NetworkConnectionToClient clientConnection, ClientRoomSettings settings)
+    {
+        if(!_playersRoom.ContainsKey(clientConnection))
+        {
+            Debug.Log("Requesting client doesn't own a room");
+            return;
+        }
+
+        Guid clientRoomID = _playersRoom[clientConnection];
+        Room clientRoom = _openRooms[clientRoomID];
+
+        if (settings.roomMode != GameMode.None)
+        {
+            clientRoom.gameMode = settings.roomMode;
+            Debug.Log($"Server: Changing settings. Mode = {settings.roomMode}");
+        }
+        else
+        {
+            if (settings.gridSize != 0 && Configurations.validStages.ContainsKey(settings.gridSize))
+            {
+                clientRoom.gridSize = settings.gridSize;
+                clientRoom.totalPlayersAllowed = Configurations.validStages[clientRoom.gridSize].Keys.First();
+                Debug.Log($"Server: Changing settings. Size = {settings.gridSize}");
+            }
+
+            if (settings.participants != 0 && Configurations.validStages[clientRoom.gridSize].ContainsKey(settings.participants))
+            {
+                clientRoom.totalPlayersAllowed = settings.participants;
+                Debug.Log($"Server: Changing settings. Participants = {settings.participants}");
+            }
+        }
+        
+            
+
+        _openRooms[clientRoomID] = clientRoom;
+
+        SendUpdatedRoomInfo(clientRoomID);
+        SendClientList();
     }
 
     #endregion
@@ -236,8 +287,8 @@ public class RoomManager : MonoBehaviour
     public void InitializeRoomListing()
     {
         if(_roomContentContainer.transform.childCount > 0)
-            foreach (var card in _roomContentContainer.GetComponentsInChildren<GameObject>())
-                Destroy(card);
+            for(int childIndex = 0; childIndex < _roomContentContainer.transform.childCount; childIndex++)
+                Destroy(_roomContentContainer.transform.GetChild(childIndex).gameObject);
 
         _toggles.Clear();
         _noRoomScreen.SetActive(true);
@@ -255,19 +306,22 @@ public class RoomManager : MonoBehaviour
         ShowRooms(rooms); 
     }
 
-    [ClientCallback]
-    public void OnGameModeFilterSelected()
-    {
-        Debug.Log($"Selected game mode filter: {_gameModeDrop.value}");
-        _currentGameModeFilter = _gameModeDrop.value;
-        FilterRoomListOnGlobalSettings();
-    }
 
     [ClientCallback]
-    public void OnGridSizeFilterSelected()
+    public void OnFilterSelected(bool reset)
     {
-        Debug.Log($"selected grid size filter: {_gridSizeDrop.value}");
-        _currentGridSizeFilter = _gridSizeDrop.value;
+        if(reset)
+        {
+            _currentGameModeFilter = 0; _currentGridSizeFilter = 0; _hideFullRoomFilter = false;
+            _gameModeDrop.value = 0; _gridSizeDrop.value = 0; _hideRoomToggle.isOn = false;
+        }
+        else
+        {
+            _currentGameModeFilter = _gameModeDrop.value;
+            _currentGridSizeFilter = _gridSizeDrop.value;
+            _hideFullRoomFilter = _hideRoomToggle.isOn;
+        }
+
         FilterRoomListOnGlobalSettings();
     }
     #endregion
@@ -286,17 +340,45 @@ public class RoomManager : MonoBehaviour
         {
             _slots[slotIndex] = Instantiate(_roomSlotPrefab, _slotGridContainer).GetComponent<SlotScript>();
         }
-            
+        
+        _roomTitle.text = $"{room.roomName}'s";
+        SetupRoomButtons();
+        UpdateRoomView(_localRoom, participants);
+        _canvasController.ShowScreen(OnlineScreens.RoomView);
 
         Debug.Log("Room Initialized");
-        _roomTitle.text = $"{room.roomName}'s";
+    }
 
-        UpdateRoomView(_localRoom, participants);
+    [ClientCallback]
+    public void SetupRoomButtons()
+    {
+        ToggleSettingsButtonInteractability(_isRoomOwner);
+    }
+
+
+
+    [ClientCallback]
+    public void OnClientGameModeChanged(GameMode selectedGameMode)
+    {
+        Debug.Log($"Selected game mode: {selectedGameMode}");
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, _localRoom.roomId, new ClientRoomSettings { roomMode = selectedGameMode});
+        ButtonStates(true);
+        _canvasController.ShowScreen(OnlineScreens.RoomView);       
+    }
+
+    [ClientCallback]
+    public void OnClientGridOrParticipantChanged(int gridSize, int participants)
+    {
+        Debug.Log($"Grid Size: {gridSize}, Participants: {participants}");
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, _localRoom.roomId, new ClientRoomSettings { gridSize = gridSize, participants = participants });
+        ButtonStates(true);
         _canvasController.ShowScreen(OnlineScreens.RoomView);
     }
 
     public void UpdateRoomView(Room room, PlayerStruct[] participants = null)
     {
+        _localRoom = room;
+
         if (_isRoomOwner)
         {
             PlayerStruct localPlayer = PlayerManager.GetLocalPlayerStructure();
@@ -333,12 +415,27 @@ public class RoomManager : MonoBehaviour
         UpdateSettingsUI(_localRoom);
     }
     
-
     public void UpdateSettingsUI(Room room)
     {
         _gameMode.text = room.gameMode.ToString();
         _gridSize.text = room.gridSize.ToString();
         _participants.text = $"{room.totalPlayersAllowed}";
+
+        ButtonStates(false);
+    }
+
+    public void ButtonStates(bool waitingForServer)
+    {
+        if (!_isRoomOwner)
+            return;
+
+        if(waitingForServer)
+        {
+            ToggleSettingsButtonInteractability(false);
+            _gameMode.text = "---"; _gridSize.text = "---"; _participants.text = "---";
+        }
+        else
+            ToggleSettingsButtonInteractability(true);
     }
 
     // keep in mind for both room owner and other participants
@@ -355,6 +452,38 @@ public class RoomManager : MonoBehaviour
     }
     #endregion
 
+    #region UI Button Clickes
+    public void OnGameModeSettingClicked()
+    {
+        Debug.Log("Game mode button pressed!");
+        _gameModeSelection.InitializeGameModeSelection(OnClientGameModeChanged, OnlineScreens.RoomView);
+    }
+
+    public void OnGridOrParticipantSettingClicked()
+    {
+        Debug.Log("Grid Size & Participants clicked");
+        _advancedSettings.IntializeAdvanceSettings(
+            OnClientGridOrParticipantChanged, 
+            _localRoom.gameMode, 
+            OnlineScreens.RoomView, 
+            _localRoom.gridSize, 
+            _localRoom.totalPlayersAllowed
+        );
+    }
+
+    public void OnClientJoinButtonPressed()
+    {
+        Debug.Log($"Joining Room: {_localRoom.roomName}");
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Join, _localRoom.roomId);
+    }
+
+    public void OnClientLeaveButtonPressed()
+    {
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Leave, _localRoom.roomId);
+    }
+
+    #endregion
+
     #endregion
 
     #region Helping Functions
@@ -369,6 +498,9 @@ public class RoomManager : MonoBehaviour
 
         if (_currentGridSizeFilter != 0)
             rooms = rooms.Where(x => x.gridSize == gridSizeMapping[_currentGridSizeFilter]);
+
+        if(_hideFullRoomFilter)
+            rooms = rooms.Where(x => x.currentPlayerCount < x.totalPlayersAllowed);
 
         RefreshRoomListingUI(rooms.ToArray());
     }
@@ -404,15 +536,11 @@ public class RoomManager : MonoBehaviour
             _noRoomScreen.SetActive(true);
     }
 
-    public void OnClientJoinButtonPressed()
+    public void ToggleSettingsButtonInteractability(bool interactable)
     {
-        Debug.Log($"Joining Room: {_localRoom.roomName}");
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Join, _localRoom.roomId);
-    }
-
-    public void OnClientLeaveButtonPressed()
-    {
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Leave, _localRoom.roomId);  
+        Debug.Log($"Setting button interactability: {interactable}");
+        _gameModeButton.interactable = interactable; _gridSizeButton.interactable = interactable; _participantsButton.interactable = interactable;
+        foreach (var arrow in arrows) arrow.SetActive(interactable);
     }
     #endregion
 

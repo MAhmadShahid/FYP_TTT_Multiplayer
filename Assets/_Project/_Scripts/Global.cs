@@ -1,12 +1,53 @@
 using JetBrains.Annotations;
 using Mirror;
+using Org.BouncyCastle.Asn1.Mozilla;
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace TicTacToe
 {
-    #region General
-    [System.Serializable]
+    public static class Configurations
+    {
+        public static readonly Dictionary<int, Dictionary<int, int>> validStages = new Dictionary<int, Dictionary<int, int>>
+        {
+            [3] = new Dictionary<int, int> { [2] = 3 },
+            [5] = new Dictionary<int, int>
+            {
+                [2] = 5,
+                [3] = 4,
+                [4] = 3
+            },
+            [7] = new Dictionary<int, int>
+            {
+                [2] = 6,
+                [3] = 5,
+                [4] = 4,
+                [5] = 3
+            },
+            [7] = new Dictionary<int, int>
+            {
+                [2] = 6,
+                [3] = 5,
+                [4] = 4,
+                [5] = 3
+            },
+            [9] = new Dictionary<int, int>
+            {
+                [2] = 6,
+                [3] = 5,
+                [4] = 4,
+                [5] = 3
+            },
+        };
+
+    }
+
+
+#region General
+[System.Serializable]
     public enum GameMode
     {
         None,
@@ -114,7 +155,8 @@ namespace TicTacToe
         Start,
         RoomListing,
         RoomView,
-        Connecting
+        Connecting,
+        AdvanceSettings
     }
 
     #endregion
@@ -188,6 +230,7 @@ namespace TicTacToe
     {
         public ServerRoomOperation operation;
         public Guid roomID;
+        public ClientRoomSettings roomSettings;
     }
 
     public struct ClientRoomMessage : NetworkMessage
@@ -227,7 +270,7 @@ namespace TicTacToe
     {
         None,
         Create,
-        Update,
+        SettingChange,
         Join,
         Leave
     }
@@ -252,6 +295,16 @@ namespace TicTacToe
         public GridTier gridTier;
         public int playerCount;
     }
+
+    [Serializable]
+    public struct ClientRoomSettings
+    {
+        public GameMode roomMode;
+        public int gridSize;
+        public int participants;
+        public int blitzSeconds;
+    }
+
     #endregion
 
 }

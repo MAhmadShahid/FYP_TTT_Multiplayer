@@ -10,6 +10,8 @@ namespace TicTacToe
 {
     public class CanvasController : MonoBehaviour
     {
+        public bool uiTesting;
+        
         [SerializeField] MessageHandler _messageHandler;
         [SerializeField] RoomManager _roomManager;
 
@@ -244,7 +246,8 @@ namespace TicTacToe
         #region Unity Callbacks
         private void Start()
         {
-            InitializeCanvasOffline();
+            if(!uiTesting)
+                InitializeCanvasOffline();
         }
         #endregion
 
