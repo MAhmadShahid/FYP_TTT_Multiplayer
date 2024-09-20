@@ -218,6 +218,8 @@ namespace TicTacToe
         RefreshList,
         Update,
         Kick,
+        Joined,
+        Left
     }
 
     [Serializable]

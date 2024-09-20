@@ -31,12 +31,13 @@ public class MyNetworkManager : NetworkManager
 #else
         if(_distributionUnit)
             networkAddress = "103.31.104.181";
+
         else
             networkAddress = "192.168.18.200";
         _hud.enabled = false;
 #endif
 
-        _addressText.text = $"Network Address: {networkAddress} Port: 7777";
+        _addressText.text = $"Network Address: {networkAddress} Port: 7778";
         base.Awake();
 
         Debug.Log($"Awake After: Mode = {mode}");

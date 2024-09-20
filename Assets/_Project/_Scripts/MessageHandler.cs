@@ -73,6 +73,12 @@ public class MessageHandler : MonoBehaviour
                 Debug.Log("Server: Client trying to create room");
                 _roomManager.OnServerCreateRoom(connection);
                 break;
+            case ServerRoomOperation.Join:
+                _roomManager.OnServerAddPlayerToRoom(message.roomID, connection);
+                break;
+            case ServerRoomOperation.Leave:
+                _roomManager.OnServerRemovePlayerFromRoom(connection);  
+                break;
         }
     }
 
@@ -140,8 +146,14 @@ public class MessageHandler : MonoBehaviour
                 Debug.Log("Client: Room created!");
                 _roomManager.InitializeRoomView(message.roomsInfo[0], true);
                 break;
+            case ClientRoomOperation.Joined:
+                _roomManager.InitializeRoomView(message.roomsInfo[0], false);
+                break;
             case ClientRoomOperation.Update:
-                    
+                _roomManager.UpdateRoomView(message.roomsInfo[0], message.playerInfos);
+                break;
+            case ClientRoomOperation.Left:
+                _roomManager.OnClientLeaveRoom();
                 break;
         }
     }
@@ -154,6 +166,7 @@ public class MessageHandler : MonoBehaviour
             case ClientPlayerOperation.Added:
                 Debug.Log("Client: Player added on server");
                 PlayerManager.AddPlayerOnClient(message.player);
+                _canvasController.OnPlayerAdded(message.player);
                 break;
             
         }

@@ -111,18 +111,66 @@ public class RoomManager : MonoBehaviour
         }
 
         roomToJoin.currentPlayerCount++;
+        _openRooms[roomID] = roomToJoin;
+
         _roomConnections[roomID].Add(clientConnection);
+
+        clientConnection.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Joined, roomsInfo = new Room[] { roomToJoin } });
 
         SendUpdatedRoomInfo(roomID);    
         SendClientList();
     }
 
     [ServerCallback]
+    public void OnServerRemovePlayerFromRoom(NetworkConnectionToClient clientConnection)
+    {
+
+        // if player leaving is the room owner
+        if (_playersRoom.ContainsKey(clientConnection))
+        {
+            
+            Room currentRoom = _openRooms[_playersRoom[clientConnection]];
+            var participants = _roomConnections[currentRoom.roomId];
+            Debug.Log($"Removing room owner: {currentRoom.roomOwner} from {currentRoom.roomName}");
+
+            // clear up data structures
+            _openRooms.Remove(_playersRoom[clientConnection]);
+            _playersRoom.Remove(clientConnection);
+            _roomConnections.Remove(currentRoom.roomId);
+
+            foreach(var participant in participants)
+            {
+                participant.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Left });
+            }
+
+            SendClientList();
+        }
+
+        // if player is a participant in another player's room
+        foreach (var room in _roomConnections)
+            if (room.Value.Contains(clientConnection))
+            {
+                Room currentRoom = _openRooms[room.Key];
+                Debug.Log($"Removing Player; Room found: {currentRoom.roomName}");
+
+                currentRoom.currentPlayerCount--;
+                _openRooms[currentRoom.roomId] = currentRoom;
+                room.Value.Remove(clientConnection);
+
+                // tell leaving client that they have been removed
+                clientConnection.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Left });
+
+                // update players in room view
+                SendUpdatedRoomInfo(currentRoom.roomId);
+
+                SendClientList();
+            }
+    }
+
+    [ServerCallback]
     public void SendClientList(NetworkConnectionToClient connection = null)
     {
         Room[] rooms = _openRooms.Select(key => key.Value).ToArray();
-        if (rooms.Length == 0)
-            return;
 
         if (connection != null)
             connection.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.RefreshList, roomsInfo = rooms });
@@ -154,23 +202,10 @@ public class RoomManager : MonoBehaviour
         foreach(var room  in _roomConnections)
         {
             if (room.Value.Contains(clientConnection))
-                RemovePlayerFromRoom(room.Key, clientConnection);
+                OnServerRemovePlayerFromRoom( clientConnection);
         }
     }
 
-    [ServerCallback]
-    public void RemovePlayerFromRoom(Guid roomid, NetworkConnectionToClient clientConnection)
-    {
-        _roomConnections[roomid].Remove(clientConnection);
-
-        Room currentRoom = _openRooms[roomid];
-        currentRoom.currentPlayerCount--;
-
-        // update players in room view
-
-        // update players in room listing screens
-        SendClientList();
-    }
     #endregion
 
     #region ClientCallbacks
@@ -193,7 +228,7 @@ public class RoomManager : MonoBehaviour
     [ClientCallback]
     public void OnClientCreateRoom()
     {
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Create);
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Create, Guid.Empty);
     }
 
 
@@ -216,6 +251,7 @@ public class RoomManager : MonoBehaviour
             Destroy(_roomContentContainer.transform.GetChild(childIndex).gameObject);
         }
 
+        _toggles.Clear();
         ShowRooms(rooms); 
     }
 
@@ -253,6 +289,7 @@ public class RoomManager : MonoBehaviour
             
 
         Debug.Log("Room Initialized");
+        _roomTitle.text = $"{room.roomName}'s";
 
         UpdateRoomView(_localRoom, participants);
         _canvasController.ShowScreen(OnlineScreens.RoomView);
@@ -263,7 +300,7 @@ public class RoomManager : MonoBehaviour
         if (_isRoomOwner)
         {
             PlayerStruct localPlayer = PlayerManager.GetLocalPlayerStructure();
-            _slots[0].InitializeSlot(0, true);
+            _slots[0].InitializeSlot(1, true);
             _slots[0].AddPlayer(localPlayer, _isRoomOwner);
         }
 
@@ -271,25 +308,29 @@ public class RoomManager : MonoBehaviour
 
         if (participants != null)
         {
-
-            for(int playerIndex = 0; playerIndex > participants.Length; playerIndex++)
+            for(int playerIndex = 0; playerIndex < participants.Length; playerIndex++)
             {
-                if (participants[playerIndex].playerid == room.roomOwner && !_isRoomOwner)
+                if (participants[playerIndex].playerid == room.roomOwner)
                 {
-                    _slots[0].AddPlayer(participants[playerIndex], _isRoomOwner);
+                    if(!_isRoomOwner)
+                    {
+                        _slots[0].InitializeSlot(1, true);
+                        _slots[0].AddPlayer(participants[playerIndex], true);
+                    }
+
                     continue;
                 }
 
-                _slots[0].InitializeSlot(slotCounter, slotCounter < room.totalPlayersAllowed);
-                _slots[slotCounter++].AddPlayer(participants[playerIndex], _isRoomOwner);
+                _slots[slotCounter].InitializeSlot(slotCounter + 1, slotCounter < room.totalPlayersAllowed);
+                _slots[slotCounter++].AddPlayer(participants[playerIndex], false);
             }
         }
 
         for (; slotCounter < 9; slotCounter++)
             _slots[slotCounter].InitializeSlot(slotCounter, slotCounter < room.totalPlayersAllowed);
 
+
         UpdateSettingsUI(_localRoom);
-        
     }
     
 
@@ -303,7 +344,14 @@ public class RoomManager : MonoBehaviour
     // keep in mind for both room owner and other participants
     public void OnClientLeaveRoom()
     {
+        // reset room view
+        _localRoom = new Room();
+        _isRoomOwner = false;
 
+        foreach (var slot in _slots)
+            Destroy(slot.gameObject);
+
+        _canvasController.ShowScreen(OnlineScreens.RoomListing);
     }
     #endregion
 
@@ -359,6 +407,12 @@ public class RoomManager : MonoBehaviour
     public void OnClientJoinButtonPressed()
     {
         Debug.Log($"Joining Room: {_localRoom.roomName}");
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Join, _localRoom.roomId);
+    }
+
+    public void OnClientLeaveButtonPressed()
+    {
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Leave, _localRoom.roomId);  
     }
     #endregion
 

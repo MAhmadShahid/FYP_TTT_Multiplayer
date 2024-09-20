@@ -26,7 +26,7 @@ public class RoomCardScript : MonoBehaviour
 
     public void SetupUI(string name)
     {
-        roomName.text = name;
+        roomName.text = $"{name}'s Room";
         gameMode.text = GameMode.Classic.ToString();
         gridSize.text = "3x3";
 

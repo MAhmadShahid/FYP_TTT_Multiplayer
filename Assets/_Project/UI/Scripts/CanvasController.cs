@@ -31,6 +31,7 @@ namespace TicTacToe
         Toggle _highTierToggle;
         [SerializeField]
         GameObject _playerBanner;
+        [SerializeField] TextMeshProUGUI _userName;
 
         [SerializeField]
         TextMeshProUGUI _gameModeText;
@@ -110,6 +111,11 @@ namespace TicTacToe
             _gridTier = GridTier.None;
             
             ShowScreen(OnlineScreens.GameMode);
+        }
+
+        public void OnPlayerAdded(PlayerStruct player)
+        {
+            _userName.text = player.name;
         }
 
         #endregion
