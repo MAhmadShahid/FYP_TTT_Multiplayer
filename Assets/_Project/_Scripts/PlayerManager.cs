@@ -147,8 +147,11 @@ public class PlayerManager : MonoBehaviour
     public static void RemovePlayerFromLobby(NetworkConnectionToClient clientConnection)
     {
         if (!_instance._playerConnectionMapping.ContainsKey(clientConnection))
+        {
+            Debug.LogWarning("Player doesn't exist in online pool");
             return;
-
+        }
+            
         PlayerManager manager = PlayerManager._instance;
         Player player = manager._onlinePlayers[manager._playerConnectionMapping[clientConnection]];
 
@@ -160,6 +163,8 @@ public class PlayerManager : MonoBehaviour
 
         Lobby lobby = player.state == PlayerState.QuickJoinLobby ? Lobby.QuickLobby : Lobby.RoomLobby;
         player.state = PlayerState.Online;
+
+        Debug.Log($"Removing: Removing player from {lobby}");
 
         switch (lobby)
         {

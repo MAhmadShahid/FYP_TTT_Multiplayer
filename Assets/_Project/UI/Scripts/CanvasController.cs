@@ -17,38 +17,27 @@ namespace TicTacToe
 
         #region online lobby reference & vars
 
-        // UI References
-        [SerializeField]
-        GameObject _topBar;
-        [SerializeField]
-        GameObject _bottomBar;
-
-        [SerializeField]
-        List<ScreenStructure<OnlineScreens>> _onlineScreenList = new List<ScreenStructure<OnlineScreens>>();
-        ScreenStructure<OnlineScreens> _currentActiveScreen;    
-
-        [SerializeField]
-        Toggle _lowTierToggle;
-        [SerializeField]    
-        Toggle _highTierToggle;
-        [SerializeField]
-        GameObject _playerBanner;
-        [SerializeField] TextMeshProUGUI _userName;
-
-        [SerializeField]
-        TextMeshProUGUI _gameModeText;
-
-        // Room UI References
-        [SerializeField]
-        GameObject _roomCardPrefab;
-        [SerializeField]
-        GameObject _noRoomScreen;
-        [SerializeField]
-        GameObject _roomContentContainer;
 
         // Game Settings
         GameMode _gameMode;
         GridTier _gridTier;
+
+        // Variables
+        [SerializeField]
+        List<ScreenStructure<OnlineScreens>> _onlineScreenList = new List<ScreenStructure<OnlineScreens>>();
+        ScreenStructure<OnlineScreens> _currentActiveScreen;
+
+        [Header("General UI References")]
+
+        [SerializeField] GameObject _topBar;
+        [SerializeField] GameObject _bottomBar;
+        [SerializeField] TextMeshProUGUI _userName;
+        [SerializeField] GameModeSelectionScript _modeSelection;
+        [SerializeField] TierSelectionScript _tierSelection;
+
+        [Header("Testing Prefabs")]
+        [SerializeField] GameObject _playerBanner;
+        [SerializeField] Button _cancelSearchingButton;
 
         #endregion
 
@@ -67,10 +56,6 @@ namespace TicTacToe
             // resetting all states
             _gameMode = GameMode.None;
             _gridTier = GridTier.None;
-
-            _lowTierToggle.isOn = false;
-            _highTierToggle.isOn = false;
-            
 
             ShowScreen(OnlineScreens.OnlineLobby);
         }
@@ -128,7 +113,7 @@ namespace TicTacToe
         {
             _messageHandler.SendPlayerHandleMessage(Lobby.QuickLobby, PlayerHandlingOperation.AddToLobby);
 
-            InitializeGameMode();
+            _modeSelection.InitializeGameModeSelection(OnModeSelected, OnQuitLobby);
         }
 
         public void OnRoomOptionSelected()
@@ -138,37 +123,22 @@ namespace TicTacToe
             ShowScreenIntegerNumbering(7);
         }
 
-        public void OnModeSelect(int mode)
+        public void OnModeSelected(GameMode mode)
         {
-            if (mode != (int)GameMode.None)
+            if (mode != GameMode.None)
             {
                 Debug.Log($"Mode Chosen: {mode}");
-                _gameMode = (GameMode)mode;
-                _gameModeText.text = _gameMode.ToString();
+                _gameMode = mode;
+
+                _tierSelection.InitializeTierSelection(OnStartGame, OnlineScreens.GameMode, _gameMode);
                 ShowScreen(OnlineScreens.GridTier);
             }
         }
 
-        public void OnLowTierToggled()
+        public void OnStartGame(GridTier tier)
         {
-            if(_lowTierToggle.isOn)
-            {
-                Debug.Log($"Tier Chosen: Low Grid Tier");
-                _gridTier = GridTier.Low;
-            }
-        }
+            _gridTier = tier;
 
-        public void OnHighTierToggled()
-        {
-            if (_highTierToggle.isOn)
-            {
-                Debug.Log($"Tier Chosen: High Grid Tier");
-                _gridTier = GridTier.High;
-            }
-        }
-
-        public void OnStartGame()
-        {
             if (_gameMode != GameMode.None && _gridTier != GridTier.None)
             {
                 Debug.Log($"Starting match with settings =  Mode: {_gameMode}  Tier: {_gridTier} ");
@@ -178,24 +148,29 @@ namespace TicTacToe
                 Debug.Log("All options not selected!");
         }
 
-        public void OnCancelSearchingForMatch()
-        {
-            _messageHandler.SendOnlineMatchMessage(GameMode.None, GridTier.None, ServerMatchOperation.CancelMatchmaking);
-        }
 
         public void ShowSearchingForMatchScreen()
         {
             ShowScreen(OnlineScreens.MatchSearching);
+            _cancelSearchingButton.gameObject.SetActive(true);
         }
 
         public void OnQuitLobby()
         {
             _messageHandler.SendPlayerHandleMessage(Lobby.None, PlayerHandlingOperation.RemoveFromLobby);
-            ShowScreen(OnlineScreens.OnlineLobby);
         }
 
+        public void OnClientCancelSearchingForMatch()
+        {
+            _messageHandler.SendPlayerHandleMessage(Lobby.QuickLobby, PlayerHandlingOperation.RemoveFromLobby);
+        }
 
         #endregion
+
+        public void PlayerRemovedFromLobby()
+        {
+            InitializeCanvasOnline();
+        }
 
         #region Mirror:NetworkManager Callbacks
 

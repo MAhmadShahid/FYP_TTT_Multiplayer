@@ -208,12 +208,9 @@ public class RoomManager : MonoBehaviour
     public void RemovePlayerFromLobby(NetworkConnectionToClient clientConnection, bool disconnection = false)
     {
         _subscribedRoomInfoClients.Remove(clientConnection);
+        Debug.Log("Removing: player subscription to room");
 
-        foreach(var room in _roomConnections)
-        {
-            if (room.Value.Contains(clientConnection))
-                OnServerRemovePlayerFromRoom(clientConnection);
-        }
+        OnServerRemovePlayerFromRoom(clientConnection);
     }
 
     [ServerCallback]

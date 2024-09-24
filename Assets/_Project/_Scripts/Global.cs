@@ -176,7 +176,8 @@ namespace TicTacToe
     public enum ClientPlayerOperation
     {
         None,
-        Added
+        Added,
+        Removed
     }
 
     public struct PlayerHandlingMessage : NetworkMessage
@@ -189,6 +190,7 @@ namespace TicTacToe
     {
         public ClientPlayerOperation operation;
         public PlayerStruct player;
+        public Lobby lobby;
     }
 
     #endregion

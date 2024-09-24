@@ -37,6 +37,7 @@ public class MessageHandler : MonoBehaviour
                 break;
             case PlayerHandlingOperation.RemoveFromLobby:
                 PlayerManager.RemovePlayerFromLobby(connection);
+                connection.Send(new ClientPlayerMessage { operation = ClientPlayerOperation.Removed });
                 break;
         }
     }
@@ -171,7 +172,9 @@ public class MessageHandler : MonoBehaviour
                 PlayerManager.AddPlayerOnClient(message.player);
                 _canvasController.OnPlayerAdded(message.player);
                 break;
-            
+            case ClientPlayerOperation.Removed:
+                _canvasController.PlayerRemovedFromLobby();
+                break;
         }
     }
     
