@@ -83,6 +83,9 @@ public class MessageHandler : MonoBehaviour
             case ServerRoomOperation.SettingChange:
                 _roomManager.OnServerChangeRoomSettings(connection, message.roomSettings);
                 break;
+            case ServerRoomOperation.Kick:
+                _roomManager.OnServerKickPlayer(connection, message.playerIDs);
+                break;
         }
     }
 
@@ -202,10 +205,10 @@ public class MessageHandler : MonoBehaviour
     }
 
     [ClientCallback]
-    public void SendRoomMessageToServer(ServerRoomOperation op, Guid roomID, ClientRoomSettings settings = new ClientRoomSettings() )
+    public void SendRoomMessageToServer(ServerRoomOperation op, Guid[] playerID = null, Guid roomID = default(Guid), ClientRoomSettings settings = new ClientRoomSettings() )
     {
         Debug.Log($"Sending message to server: {op}");
-        NetworkClient.Send(new ServerRoomMessage { operation = op, roomID = roomID, roomSettings = settings });
+        NetworkClient.Send(new ServerRoomMessage { operation = op, roomID = roomID, roomSettings = settings, playerIDs = playerID });
 
     }
 

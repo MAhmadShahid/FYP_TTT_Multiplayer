@@ -178,6 +178,25 @@ public class RoomManager : MonoBehaviour
     }
 
     [ServerCallback]
+    public void OnServerKickPlayer(NetworkConnectionToClient roomOwner, Guid[] playerID = null, bool kickAll = false)
+    {
+        if(!_playersRoom.ContainsKey(roomOwner))
+        {
+            Debug.LogWarning("Kick: someone other than room owner sent kicking request");
+            return;
+        }
+
+        foreach (var player in playerID)
+        {
+            NetworkConnectionToClient connectionForPlayer = PlayerManager.GetClientConnectionFromPlayerID(player);
+            
+            if (_roomConnections[_playersRoom[roomOwner]].Contains(connectionForPlayer))
+                OnServerRemovePlayerFromRoom(connectionForPlayer);
+        }
+
+    }
+
+    [ServerCallback]
     public void SendClientList(NetworkConnectionToClient connection = null)
     {
         Room[] rooms = _openRooms.Select(key => key.Value).ToArray();
@@ -276,7 +295,7 @@ public class RoomManager : MonoBehaviour
     [ClientCallback]
     public void OnClientCreateRoom()
     {
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Create, Guid.Empty);
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Create, null, Guid.Empty);
     }
 
 
@@ -332,6 +351,7 @@ public class RoomManager : MonoBehaviour
 
         _localRoom = room;
         _isRoomOwner = forOwner;
+        SlotScript.OwnersRoom = forOwner;
 
         for(int slotIndex = 0; slotIndex < 9; slotIndex++)
         {
@@ -358,7 +378,7 @@ public class RoomManager : MonoBehaviour
     public void OnClientGameModeChanged(GameMode selectedGameMode)
     {
         Debug.Log($"Selected game mode: {selectedGameMode}");
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, _localRoom.roomId, new ClientRoomSettings { roomMode = selectedGameMode});
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, null, _localRoom.roomId, new ClientRoomSettings { roomMode = selectedGameMode});
         ButtonStates(true);
         _canvasController.ShowScreen(OnlineScreens.RoomView);       
     }
@@ -367,7 +387,7 @@ public class RoomManager : MonoBehaviour
     public void OnClientGridOrParticipantChanged(int gridSize, int participants)
     {
         Debug.Log($"Grid Size: {gridSize}, Participants: {participants}");
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, _localRoom.roomId, new ClientRoomSettings { gridSize = gridSize, participants = participants });
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, null, _localRoom.roomId, new ClientRoomSettings { gridSize = gridSize, participants = participants });
         ButtonStates(true);
         _canvasController.ShowScreen(OnlineScreens.RoomView);
     }
@@ -401,7 +421,7 @@ public class RoomManager : MonoBehaviour
                 }
 
                 _slots[slotCounter].InitializeSlot(slotCounter + 1, slotCounter < room.totalPlayersAllowed);
-                _slots[slotCounter++].AddPlayer(participants[playerIndex], false);
+                _slots[slotCounter++].AddPlayer(participants[playerIndex], false, OnSinglePlayerKick);
             }
         }
 
@@ -410,6 +430,12 @@ public class RoomManager : MonoBehaviour
 
 
         UpdateSettingsUI(_localRoom);
+    }
+
+    [ClientCallback]
+    public void OnClientKickPlayer(Guid[] playerToKick)
+    { 
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Kick, playerToKick);
     }
     
     public void UpdateSettingsUI(Room room)
@@ -456,6 +482,12 @@ public class RoomManager : MonoBehaviour
         _gameModeSelection.InitializeGameModeSelection(OnClientGameModeChanged, OnlineScreens.RoomView);
     }
 
+    public void OnSinglePlayerKick(Guid playerID)
+    {
+        Guid[] playerIds = new Guid[] { playerID };
+        OnClientKickPlayer(playerIds);
+    }
+
     public void OnGridOrParticipantSettingClicked()
     {
         Debug.Log("Grid Size & Participants clicked");
@@ -471,12 +503,12 @@ public class RoomManager : MonoBehaviour
     public void OnClientJoinButtonPressed()
     {
         Debug.Log($"Joining Room: {_localRoom.roomName}");
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Join, _localRoom.roomId);
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Join, null, _localRoom.roomId);
     }
 
     public void OnClientLeaveButtonPressed()
     {
-        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Leave, _localRoom.roomId);
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Leave, null, _localRoom.roomId);
     }
 
     #endregion
@@ -539,6 +571,9 @@ public class RoomManager : MonoBehaviour
         _gameModeButton.interactable = interactable; _gridSizeButton.interactable = interactable; _participantsButton.interactable = interactable;
         foreach (var arrow in arrows) arrow.SetActive(interactable);
     }
+
+    public void Print(string text)
+        { Debug.Log(text); }
     #endregion
 
     #region Unity Callbacks

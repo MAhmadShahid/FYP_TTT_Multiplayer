@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -8,7 +9,10 @@ namespace TicTacToe
 {
     public class SlotScript : MonoBehaviour
     {
+        public static bool OwnersRoom;
+
         PlayerStruct _player;
+        int _slotNumber;
         bool _playerAssigned = false;
         bool _isRoomOwner = false;
 
@@ -24,8 +28,12 @@ namespace TicTacToe
         [SerializeField] GameObject _addBotButton;
         [SerializeField] GameObject _notAvailablePanel;
 
+        [SerializeField] Button _kickPlayerButton;
+
         public void InitializeSlot(int slotNumber, bool isSlotValid)
         {
+            _slotNumber = slotNumber;
+
             _playerBanner.SetActive(false);
             _addBotButton.SetActive(false);
 
@@ -33,11 +41,17 @@ namespace TicTacToe
             _notAvailablePanel.SetActive(!isSlotValid);
         }
 
-        public void AddPlayer(PlayerStruct player, bool isRoomOwner)
+        public void AddPlayer(PlayerStruct player, bool isRoomOwner, Action<Guid> onKickPlayer = null)
         {
             _player = player;
             _playerAssigned = true;
             _isRoomOwner = isRoomOwner;
+
+            if(OwnersRoom)
+            {
+                _kickPlayerButton.onClick.RemoveAllListeners();
+                _kickPlayerButton.onClick.AddListener(() => { onKickPlayer(_player.playerid); });
+            }
 
             UpdatePlayerUI();
         }
@@ -50,6 +64,8 @@ namespace TicTacToe
 
             _playerBanner.SetActive(true);
             _playerNotAvailablePanel.SetActive(false);
+
+            _kickPlayerButton.gameObject.SetActive(OwnersRoom && !_isRoomOwner);
             Debug.Log("Client: (SlotScript) Added player");
         }
 

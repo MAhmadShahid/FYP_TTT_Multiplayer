@@ -196,7 +196,8 @@ public class PlayerManager : MonoBehaviour
         };
     }
 
- 
+    public static NetworkConnectionToClient GetClientConnectionFromPlayerID(Guid playerID) => _instance._onlinePlayers[playerID].connection;
+
 
     #endregion
 

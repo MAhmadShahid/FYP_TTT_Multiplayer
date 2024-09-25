@@ -233,6 +233,7 @@ namespace TicTacToe
         public ServerRoomOperation operation;
         public Guid roomID;
         public ClientRoomSettings roomSettings;
+        public Guid[] playerIDs;
     }
 
     public struct ClientRoomMessage : NetworkMessage
@@ -274,7 +275,8 @@ namespace TicTacToe
         Create,
         SettingChange,
         Join,
-        Leave
+        Leave,
+        Kick
     }
 
     #endregion

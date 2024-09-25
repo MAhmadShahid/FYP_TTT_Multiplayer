@@ -153,6 +153,7 @@ MonoBehaviour:
   _slotNumberText: {fileID: 5236579760648323820}
   _addBotButton: {fileID: 3872584427843090799}
   _notAvailablePanel: {fileID: 8735009809811419570}
+  _kickPlayerButton: {fileID: 5606576860506341306}
 --- !u!1 &3986033724835767116
 GameObject:
   m_ObjectHideFlags: 0
@@ -637,6 +638,10 @@ PrefabInstance:
       propertyPath: m_Material
       value: 
       objectReference: {fileID: 0}
+    - target: {fileID: 8168042297277002796, guid: cc39ab5d9ab7b8e41803d17e700a237f, type: 3}
+      propertyPath: m_Material
+      value: 
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: cc39ab5d9ab7b8e41803d17e700a237f, type: 3}
 --- !u!114 &623786255182979073 stripped
@@ -670,6 +675,17 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 9030856575781973515, guid: cc39ab5d9ab7b8e41803d17e700a237f, type: 3}
   m_PrefabInstance: {fileID: 4365176346178489237}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &5606576860506341306 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8168042297277002799, guid: cc39ab5d9ab7b8e41803d17e700a237f, type: 3}
+  m_PrefabInstance: {fileID: 4365176346178489237}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!114 &6295996643009761530 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 7767556332479978351, guid: cc39ab5d9ab7b8e41803d17e700a237f, type: 3}
