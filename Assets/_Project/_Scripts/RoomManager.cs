@@ -37,6 +37,8 @@ public class RoomManager : MonoBehaviour
 
     [SerializeField] GameModeSelectionScript _gameModeSelection;
     [SerializeField] AdvanceSettingsScript _advancedSettings;
+
+    [SerializeField] Button _startGameButton;
     #endregion
 
     #region Variables
@@ -63,6 +65,15 @@ public class RoomManager : MonoBehaviour
     SlotScript[] _slots = new SlotScript[9];
 
 
+    #endregion
+
+    #region Mirror Callbacks
+
+    [ClientCallback]
+    public void OnClientDisconnect()
+    {
+        OnClientLeaveRoom();
+    }
     #endregion
 
     #region ServerCallbacks
@@ -394,6 +405,8 @@ public class RoomManager : MonoBehaviour
 
     public void UpdateRoomView(Room room, PlayerStruct[] participants = null)
     {
+        SlotScript.ResetStaticStats();
+
         _localRoom = room;
 
         if (_isRoomOwner)
@@ -426,10 +439,12 @@ public class RoomManager : MonoBehaviour
         }
 
         for (; slotCounter < 9; slotCounter++)
-            _slots[slotCounter].InitializeSlot(slotCounter, slotCounter < room.totalPlayersAllowed);
+            _slots[slotCounter].InitializeSlot(slotCounter + 1, slotCounter < room.totalPlayersAllowed);
 
 
         UpdateSettingsUI(_localRoom);
+
+        _startGameButton.enabled = SlotScript.invalidPlayers == 0;
     }
 
     [ClientCallback]
@@ -462,6 +477,7 @@ public class RoomManager : MonoBehaviour
     }
 
     // keep in mind for both room owner and other participants
+    [ClientCallback]
     public void OnClientLeaveRoom()
     {
         // reset room view

@@ -10,11 +10,13 @@ namespace TicTacToe
     public class SlotScript : MonoBehaviour
     {
         public static bool OwnersRoom;
+        public static int invalidPlayers = 0;
 
         PlayerStruct _player;
         int _slotNumber;
         bool _playerAssigned = false;
         bool _isRoomOwner = false;
+        bool _isSlotValid = true;
 
         // player banner references
         [SerializeField] GameObject _playerBanner;
@@ -30,9 +32,15 @@ namespace TicTacToe
 
         [SerializeField] Button _kickPlayerButton;
 
+        public static void ResetStaticStats()
+        {
+            invalidPlayers = 0;
+        }
+
         public void InitializeSlot(int slotNumber, bool isSlotValid)
         {
             _slotNumber = slotNumber;
+            _isSlotValid = isSlotValid;
 
             _playerBanner.SetActive(false);
             _addBotButton.SetActive(false);
@@ -43,6 +51,9 @@ namespace TicTacToe
 
         public void AddPlayer(PlayerStruct player, bool isRoomOwner, Action<Guid> onKickPlayer = null)
         {
+            if(!_isSlotValid)
+                invalidPlayers++;
+
             _player = player;
             _playerAssigned = true;
             _isRoomOwner = isRoomOwner;
@@ -63,7 +74,8 @@ namespace TicTacToe
             _roomOwner.SetActive(_isRoomOwner);
 
             _playerBanner.SetActive(true);
-            _playerNotAvailablePanel.SetActive(false);
+            _playerNotAvailablePanel.SetActive(!_isSlotValid);
+            _notAvailablePanel.SetActive(false);
 
             _kickPlayerButton.gameObject.SetActive(OwnersRoom && !_isRoomOwner);
             Debug.Log("Client: (SlotScript) Added player");
@@ -73,6 +85,8 @@ namespace TicTacToe
         {
             _playerNotAvailablePanel.SetActive(false);
         }
+
+
         
     }
 }

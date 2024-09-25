@@ -6,16 +6,14 @@ using TMPro;
 
 public class MyNetworkManager : NetworkManager
 {
-    [SerializeField]
-    MessageHandler _messageHandler;
-    [SerializeField]
-    CanvasController _canvasController;
-    [SerializeField]
-    LobbyManager _lobbyManager;
-    [SerializeField]
-    NetworkManagerHUD _hud;
-    [SerializeField]
-    bool _distributionUnit = false;
+    [SerializeField] MessageHandler _messageHandler;
+    [SerializeField] CanvasController _canvasController;
+    [SerializeField] LobbyManager _lobbyManager;
+    [SerializeField] NetworkManagerHUD _hud;
+    [SerializeField] RoomManager _roomManager;
+    
+    
+    [SerializeField] bool _distributionUnit = false;
 
     [SerializeField]
     TextMeshProUGUI _addressText;
@@ -100,7 +98,9 @@ public class MyNetworkManager : NetworkManager
     public override void OnClientDisconnect()
     {
         base.OnClientDisconnect();
+        _roomManager.OnClientDisconnect();
         _canvasController.OnClientDisconnect();
+        
         Debug.Log("Disconnected from server");
     }
 
