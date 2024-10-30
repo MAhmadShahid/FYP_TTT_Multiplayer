@@ -38,7 +38,10 @@ public class RoomManager : MonoBehaviour
     [SerializeField] GameModeSelectionScript _gameModeSelection;
     [SerializeField] AdvanceSettingsScript _advancedSettings;
 
-    [SerializeField] Button _startGameButton;
+    [SerializeField] GameObject _roomInfoButtonPrefab, _startButtonPrefab;
+    [SerializeField] Transform _buttonContainer;
+    Button _startGameButton, _roomInfoButton;
+     
     #endregion
 
     #region Variables
@@ -59,6 +62,7 @@ public class RoomManager : MonoBehaviour
 
     // Room View UI Variables
     bool _isRoomOwner = false;
+    bool _settingsUpdateServerWait = false;
 
     GameMode _currentGameMode; int _currentGridSize; int _currentParticipantsCount;
 
@@ -356,9 +360,11 @@ public class RoomManager : MonoBehaviour
     #region Room View
     public void InitializeRoomView(Room room, bool forOwner, PlayerStruct[] participants = null)
     {
-        Debug.Log("Client: Initializing Room View");
-        Debug.Log($"Client Room Setttings: {room.roomName}, {room.roomId}, {room.gameMode}, {room.gridSize}");
-        Debug.Log($"Is room owner? {forOwner}");
+        UtilityClass.LogMessages(
+            "Client: Initializing Room View",
+            $"Client Room Setttings: {room.roomName}, {room.roomId}, {room.gameMode}, {room.gridSize}",
+            $"Is room owner? {forOwner}"
+        );
 
         _localRoom = room;
         _isRoomOwner = forOwner;
@@ -374,12 +380,19 @@ public class RoomManager : MonoBehaviour
         UpdateRoomView(_localRoom, participants);
         _canvasController.ShowScreen(OnlineScreens.RoomView);
 
-        Debug.Log("Room Initialized");
+        UtilityClass.LogMessages("Room Initialized");
     }
 
     [ClientCallback]
     public void SetupRoomButtons()
     {
+        _roomInfoButton = Instantiate(_roomInfoButtonPrefab, _buttonContainer).GetComponent<Button>();
+
+        if (_isRoomOwner)
+        {
+            _startGameButton = Instantiate(_startButtonPrefab, _buttonContainer).GetComponent<Button>();
+        }
+
         ToggleSettingsButtonInteractability(_isRoomOwner);
     }
 
@@ -388,18 +401,18 @@ public class RoomManager : MonoBehaviour
     [ClientCallback]
     public void OnClientGameModeChanged(GameMode selectedGameMode)
     {
-        Debug.Log($"Selected game mode: {selectedGameMode}");
+        UtilityClass.LogMessages($"Selected game mode: {selectedGameMode}");
         _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, null, _localRoom.roomId, new ClientRoomSettings { roomMode = selectedGameMode});
-        ButtonStates(true);
+        ButtonWaitingState(true);
         _canvasController.ShowScreen(OnlineScreens.RoomView);       
     }
 
     [ClientCallback]
     public void OnClientGridOrParticipantChanged(int gridSize, int participants)
     {
-        Debug.Log($"Grid Size: {gridSize}, Participants: {participants}");
+        UtilityClass.LogMessages($"Grid Size: {gridSize}, Participants: {participants}");
         _messageHandler.SendRoomMessageToServer(ServerRoomOperation.SettingChange, null, _localRoom.roomId, new ClientRoomSettings { gridSize = gridSize, participants = participants });
-        ButtonStates(true);
+        ButtonWaitingState(true);
         _canvasController.ShowScreen(OnlineScreens.RoomView);
     }
 
@@ -443,8 +456,7 @@ public class RoomManager : MonoBehaviour
 
 
         UpdateSettingsUI(_localRoom);
-
-        _startGameButton.enabled = SlotScript.invalidPlayers == 0;
+        UpdateStartButtonAvailability();
     }
 
     [ClientCallback]
@@ -459,15 +471,16 @@ public class RoomManager : MonoBehaviour
         _gridSize.text = room.gridSize.ToString();
         _participants.text = $"{room.totalPlayersAllowed}";
 
-        ButtonStates(false);
+        ButtonWaitingState(false);
     }
 
-    public void ButtonStates(bool waitingForServer)
+    public void ButtonWaitingState(bool waitingForServer)
     {
         if (!_isRoomOwner)
             return;
 
-        if(waitingForServer)
+        _settingsUpdateServerWait = waitingForServer;
+        if (waitingForServer)
         {
             ToggleSettingsButtonInteractability(false);
             _gameMode.text = "---"; _gridSize.text = "---"; _participants.text = "---";
@@ -487,11 +500,25 @@ public class RoomManager : MonoBehaviour
         foreach (var slot in _slots)
             Destroy(slot.gameObject);
 
+        SlotScript.ResetStaticStats();
+        Destroy(_startGameButton);
+        Destroy(_roomInfoButton);
+
+        _startGameButton = null;
+        _roomInfoButton = null;
+
         _canvasController.ShowScreen(OnlineScreens.RoomListing);
     }
+
+    public void UpdateStartButtonAvailability()
+    {
+        if(_isRoomOwner && _startGameButton != null)
+            _startGameButton.interactable = !_settingsUpdateServerWait && SlotScript.invalidPlayers == 0 && _localRoom.currentPlayerCount == _localRoom.totalPlayersAllowed;
+    }
+
     #endregion
 
-    #region UI Button Clickes
+    #region UI Button Clicks
     public void OnGameModeSettingClicked()
     {
         Debug.Log("Game mode button pressed!");
@@ -525,6 +552,11 @@ public class RoomManager : MonoBehaviour
     public void OnClientLeaveButtonPressed()
     {
         _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Leave, null, _localRoom.roomId);
+    }
+
+    public void OnClientRoomStartMatch()
+    {
+
     }
 
     #endregion
@@ -583,7 +615,7 @@ public class RoomManager : MonoBehaviour
 
     public void ToggleSettingsButtonInteractability(bool interactable)
     {
-        Debug.Log($"Setting button interactability: {interactable}");
+        UtilityClass.LogMessages($"Setting button interactability: {interactable}");
         _gameModeButton.interactable = interactable; _gridSizeButton.interactable = interactable; _participantsButton.interactable = interactable;
         foreach (var arrow in arrows) arrow.SetActive(interactable);
     }
