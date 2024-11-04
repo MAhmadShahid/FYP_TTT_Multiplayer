@@ -135,7 +135,7 @@ public class MessageHandler : MonoBehaviour
                 }
             case ClientMatchOperation.Start:
                 {
-                    OnClientStartMatch(message.playersInfo);
+                    OnClientStartMatch(message.playerStructInfo);
                     break;
                 }
         }
@@ -198,7 +198,7 @@ public class MessageHandler : MonoBehaviour
     }
 
     [ClientCallback]
-    public void OnClientStartMatch(PlayerInfo[] playersInfo)
+    public void OnClientStartMatch(PlayerStruct[] playersInfo)
     {
         _canvasController.ShowStartScreen(true, playersInfo);
 

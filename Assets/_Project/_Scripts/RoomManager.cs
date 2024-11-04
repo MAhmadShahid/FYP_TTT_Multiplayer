@@ -425,7 +425,7 @@ public class RoomManager : MonoBehaviour
         if (_isRoomOwner)
         {
             PlayerStruct localPlayer = PlayerManager.GetLocalPlayerStructure();
-            _slots[0].InitializeSlot(1, true);
+            _slots[0].InitializeSlot(1, true, false);
             _slots[0].AddPlayer(localPlayer, _isRoomOwner);
         }
 
@@ -439,20 +439,20 @@ public class RoomManager : MonoBehaviour
                 {
                     if(!_isRoomOwner)
                     {
-                        _slots[0].InitializeSlot(1, true);
+                        _slots[0].InitializeSlot(1, true, false);
                         _slots[0].AddPlayer(participants[playerIndex], true);
                     }
 
                     continue;
                 }
 
-                _slots[slotCounter].InitializeSlot(slotCounter + 1, slotCounter < room.totalPlayersAllowed);
+                _slots[slotCounter].InitializeSlot(slotCounter + 1, slotCounter < room.totalPlayersAllowed, false);
                 _slots[slotCounter++].AddPlayer(participants[playerIndex], false, OnSinglePlayerKick);
             }
         }
 
         for (; slotCounter < 9; slotCounter++)
-            _slots[slotCounter].InitializeSlot(slotCounter + 1, slotCounter < room.totalPlayersAllowed);
+            _slots[slotCounter].InitializeSlot(slotCounter + 1, slotCounter < room.totalPlayersAllowed, false);
 
 
         UpdateSettingsUI(_localRoom);

@@ -28,7 +28,6 @@ namespace TicTacToe
         ScreenStructure<OnlineScreens> _currentActiveScreen;
 
         [Header("General UI References")]
-
         [SerializeField] GameObject _topBar;
         [SerializeField] GameObject _bottomBar;
         [SerializeField] TextMeshProUGUI _userName;
@@ -36,7 +35,7 @@ namespace TicTacToe
         [SerializeField] TierSelectionScript _tierSelection;
 
         [Header("Testing Prefabs")]
-        [SerializeField] GameObject _playerBanner;
+        [SerializeField] GameObject _playerSlot;
         [SerializeField] Button _cancelSearchingButton;
 
         #endregion
@@ -106,6 +105,10 @@ namespace TicTacToe
         }
 
         #endregion
+        public void OnStartMatchClient()
+        {
+            
+        }
 
         #region Online Lobby Button Calls
 
@@ -192,9 +195,10 @@ namespace TicTacToe
         #endregion
 
         #region Test Functions
-        public void ShowStartScreen(bool show, PlayerInfo[] playersInfo = null)
+        public void ShowStartScreen(bool show, PlayerStruct[] playersInfo = null)
         {
             ScreenStructure<OnlineScreens> startScreenStructure = _onlineScreenList.Where(x => x.Screen == OnlineScreens.Start).FirstOrDefault();
+            
             if (!show)
             {
                 foreach (var transform in startScreenStructure.screenObject.GetComponentsInChildren<Transform>())
@@ -209,8 +213,10 @@ namespace TicTacToe
 
                 foreach (var info in playersInfo)
                 {
-                    GameObject obj = Instantiate(_playerBanner);
-                    obj.transform.SetParent(playerBannerContainer, false);
+                    GameObject obj = Instantiate(_playerSlot, playerBannerContainer);
+                    SlotScript slot = obj.GetComponent<SlotScript>();
+                    slot.InitializeSlot(0, true, true);
+                    slot.AddPlayer(info, false);
                 }
             }
 

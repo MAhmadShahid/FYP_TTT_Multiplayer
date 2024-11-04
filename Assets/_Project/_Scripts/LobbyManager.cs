@@ -25,6 +25,7 @@ public class LobbyManager : MonoBehaviour
     GameObject _stageObject;
     #endregion
 
+    [SerializeField] GameObject _matchController;
 
     #region quick join matchmaking parameters
     float _matchmakingRate = 10.0f;
@@ -45,16 +46,16 @@ public class LobbyManager : MonoBehaviour
         else
             _instance = this;
 
-        Dictionary<GridTier, Queue<NetworkConnectionToClient>> tempDict1 = new Dictionary<GridTier, Queue<NetworkConnectionToClient>>();
-        tempDict1[GridTier.Low] = new Queue<NetworkConnectionToClient>();
-        tempDict1[GridTier.High] = new Queue<NetworkConnectionToClient>();
+        Dictionary<GridTier, Queue<NetworkConnectionToClient>> classicQueue = new Dictionary<GridTier, Queue<NetworkConnectionToClient>>();
+        classicQueue[GridTier.Low] = new Queue<NetworkConnectionToClient>();
+        classicQueue[GridTier.High] = new Queue<NetworkConnectionToClient>();
 
-        Dictionary<GridTier, Queue<NetworkConnectionToClient>> tempDict2 = new Dictionary<GridTier, Queue<NetworkConnectionToClient>>();
-        tempDict1[GridTier.Low] = new Queue<NetworkConnectionToClient>();
-        tempDict1[GridTier.High] = new Queue<NetworkConnectionToClient>();
+        Dictionary<GridTier, Queue<NetworkConnectionToClient>> blitzQueue = new Dictionary<GridTier, Queue<NetworkConnectionToClient>>();
+        blitzQueue[GridTier.Low] = new Queue<NetworkConnectionToClient>();
+        blitzQueue[GridTier.High] = new Queue<NetworkConnectionToClient>();
 
-        _queues.Add(GameMode.Classic, tempDict1);
-        _queues.Add(GameMode.Blitz, tempDict2);
+        _queues.Add(GameMode.Classic, classicQueue);
+        _queues.Add(GameMode.Blitz, blitzQueue);
 
 
     }
@@ -81,8 +82,10 @@ public class LobbyManager : MonoBehaviour
     {
         Debug.Log($"Matchmaking for: {mode}");
 
-        foreach (var queue in _queues[mode].Values)
+        foreach ( var keyValuePair in _queues[mode] ) // var queue in _queues[mode].Values
         {
+            UtilityClass.LogMessages($"Key: {keyValuePair.Key} Value: {keyValuePair}");
+            var queue = keyValuePair.Value;
             int randomTryOnSameBatch = 2; // make sure to reset this as well
             int randomInteger = 0;
 
@@ -91,7 +94,7 @@ public class LobbyManager : MonoBehaviour
                 // if only bare minimum avaialable, proceed to matchmaking
                 if (queue.Count == _minPlayerCount)
                 {
-                    ExtractPlayerForMatch(mode, _minPlayerCount, queue);
+                    ExtractPlayerForMatch(mode, keyValuePair.Key, _minPlayerCount, keyValuePair.Value);
                     break;
                 }
 
@@ -100,7 +103,7 @@ public class LobbyManager : MonoBehaviour
 
                 if (randomTryOnSameBatch <= 0)
                 {
-                    ExtractPlayerForMatch(mode, queue.Count, queue);
+                    ExtractPlayerForMatch(mode, keyValuePair.Key, queue.Count, keyValuePair.Value);
                 }
                 else
                 {
@@ -111,7 +114,7 @@ public class LobbyManager : MonoBehaviour
                     }
                     else
                     {
-                        ExtractPlayerForMatch(mode, randomInteger, queue);
+                        ExtractPlayerForMatch(mode, keyValuePair.Key, randomInteger, keyValuePair.Value);
                         randomTryOnSameBatch = 2;
                     }                    
                 }
@@ -150,7 +153,7 @@ public class LobbyManager : MonoBehaviour
 
     [ServerCallback]
 
-    void ExtractPlayerForMatch(GameMode mode, int numberofPlayers, Queue<NetworkConnectionToClient> queue)
+    void ExtractPlayerForMatch(GameMode mode, GridTier gridTier, int numberofPlayers, Queue<NetworkConnectionToClient> queue)
     {
         // in case of any race condition (queues get rebuilt upon player disconnection)
         if (numberofPlayers > queue.Count)
@@ -186,26 +189,30 @@ public class LobbyManager : MonoBehaviour
             Debug.Log($"Adding: {playerConnection} to match: {matchID}");
         }
 
-        StartMatch(matchID);
+        StartMatch(matchID, mode, gridTier);
     }
 
     [ServerCallback]
-    void StartMatch(Guid matchID)
+    void StartMatch(Guid matchID, GameMode mode, GridTier gridTier)
     {
         Debug.Log("Starting Match");
         // information for each player in match
-        List<PlayerInfo> playerList = new List<PlayerInfo>();
+        List<PlayerStruct> playerList = new List<PlayerStruct>();
+        int gridSize = ReturnGridSizeInTier(gridTier);
+        
 
         foreach (var conn in _matches[matchID])
         {
             PlayerInfo info = _lobby[conn];
+            PlayerStruct player = PlayerManager.GetPlayerStructureFromConnection(conn);
 
             if (info.playerState == PlayerState.Leaving)
             {
                 AbortMatch(matchID);
                 return;
             }
-            playerList.Add(info);
+
+            playerList.Add(player);
         }
             
 
@@ -215,16 +222,23 @@ public class LobbyManager : MonoBehaviour
             currentPlayerPrefab.GetComponent<NetworkMatch>().matchId = matchID;
             NetworkServer.AddPlayerForConnection(playerConnection, currentPlayerPrefab);
             
-            playerConnection.Send(new ClientMatchMessage { clientSideOperation = ClientMatchOperation.Start, playersInfo = playerList.ToArray() });
+            playerConnection.Send(new ClientMatchMessage { clientSideOperation = ClientMatchOperation.Start, playerStructInfo = playerList.ToArray() });
         }
 
-        GameObject matchSpecificObject = Instantiate(_demoMarker);
-        matchSpecificObject.GetComponent<NetworkMatch>().matchId = matchID;
-        NetworkServer.Spawn(matchSpecificObject);
+        MatchInfo matchInfo = new MatchInfo { mode = mode, gridSize = ReturnGridSizeInTier(gridTier), playerCount = playerList.Count };
+        GameObject matchControllerObject = Instantiate(_matchController);
+        matchControllerObject.GetComponent<MatchController>().matchInfo = matchInfo;
+        matchControllerObject.GetComponent<NetworkMatch>().matchId = matchID;
+        NetworkServer.Spawn(matchControllerObject);
 
-        GameObject stage = Instantiate(_stageObject);
-        stage.GetComponent<NetworkMatch>().matchId = matchID;
-        NetworkServer.Spawn(stage);
+        // Testing spawn
+        //GameObject matchSpecificObject = Instantiate(_demoMarker);
+        //matchSpecificObject.GetComponent<NetworkMatch>().matchId = matchID;
+        //NetworkServer.Spawn(matchSpecificObject);
+
+        //GameObject stage = Instantiate(_stageObject);
+        //stage.GetComponent<NetworkMatch>().matchId = matchID;
+        //NetworkServer.Spawn(stage);
     }
 
     [ServerCallback]
@@ -303,6 +317,16 @@ public class LobbyManager : MonoBehaviour
 
         return false;
     }
+
+    #region Helping Function
+
+    [ServerCallback]
+    public int ReturnGridSizeInTier(GridTier gridTier)
+    {
+        return Configurations.gridTierSizes[gridTier][_random.Next(Configurations.gridTierSizes[gridTier].Count)];
+    }    
+
+    #endregion
 
     #endregion
 }

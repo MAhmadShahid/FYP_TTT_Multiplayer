@@ -17,6 +17,7 @@ namespace TicTacToe
         bool _playerAssigned = false;
         bool _isRoomOwner = false;
         bool _isSlotValid = true;
+        bool _listingOnly = false;
 
         // player banner references
         [SerializeField] GameObject _playerBanner;
@@ -37,10 +38,11 @@ namespace TicTacToe
             invalidPlayers = 0;
         }
 
-        public void InitializeSlot(int slotNumber, bool isSlotValid)
+        public void InitializeSlot(int slotNumber, bool isSlotValid, bool isListingOnly)
         {
             _slotNumber = slotNumber;
             _isSlotValid = isSlotValid;
+            _listingOnly = isListingOnly;
 
             _playerBanner.SetActive(false);
             _addBotButton.SetActive(false);
@@ -58,7 +60,7 @@ namespace TicTacToe
             _playerAssigned = true;
             _isRoomOwner = isRoomOwner;
 
-            if(OwnersRoom)
+            if(OwnersRoom && (onKickPlayer != null))
             {
                 _kickPlayerButton.onClick.RemoveAllListeners();
                 _kickPlayerButton.onClick.AddListener(() => { onKickPlayer(_player.playerid); });
@@ -77,7 +79,7 @@ namespace TicTacToe
             _playerNotAvailablePanel.SetActive(!_isSlotValid);
             _notAvailablePanel.SetActive(false);
 
-            _kickPlayerButton.gameObject.SetActive(OwnersRoom && !_isRoomOwner);
+            _kickPlayerButton.gameObject.SetActive(OwnersRoom && !_isRoomOwner && !_listingOnly);
             Debug.Log("Client: (SlotScript) Added player");
         }
 

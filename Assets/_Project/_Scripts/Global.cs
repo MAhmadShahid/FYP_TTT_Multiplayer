@@ -13,6 +13,7 @@ namespace TicTacToe
     {
         public static readonly Dictionary<int, Dictionary<int, int>> validStages = new Dictionary<int, Dictionary<int, int>>
         {
+            // [GridSize] = { [PlayerCount] = WinCondition } 
             [3] = new Dictionary<int, int> { [2] = 3 },
             [5] = new Dictionary<int, int>
             {
@@ -27,20 +28,20 @@ namespace TicTacToe
                 [4] = 4,
                 [5] = 3
             },
-            [7] = new Dictionary<int, int>
-            {
-                [2] = 6,
-                [3] = 5,
-                [4] = 4,
-                [5] = 3
-            },
             [9] = new Dictionary<int, int>
             {
-                [2] = 6,
-                [3] = 5,
-                [4] = 4,
-                [5] = 3
+                [2] = 7,
+                [3] = 6,
+                [4] = 5,
+                [5] = 4,
+                [6] = 3
             },
+        };
+
+        public static readonly Dictionary<GridTier, List<int>> gridTierSizes = new Dictionary<GridTier, List<int>>
+        {
+            [GridTier.Low] = new List<int> { 3, 5 },
+            [GridTier.High] = new List<int> { 7, 9 }
         };
 
     }
@@ -223,6 +224,7 @@ namespace TicTacToe
     {
         public ClientMatchOperation clientSideOperation;
         public PlayerInfo[] playersInfo;
+        public PlayerStruct[] playerStructInfo;
     }
 
     #endregion
@@ -292,11 +294,11 @@ namespace TicTacToe
     }
 
     [Serializable]
-    public struct AddedMatchInfo
+    public struct MatchInfo
     {
         public string name;
         public GameMode mode;
-        public GridTier gridTier;
+        public int gridSize;
         public int playerCount;
     }
 
