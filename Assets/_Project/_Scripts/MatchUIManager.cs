@@ -13,6 +13,10 @@ public class MatchUIManager : MonoBehaviour
     [SerializeField] GameObject _topPanel;
     [SerializeField] GameObject _matchmakedScreen;
     [SerializeField] GameObject _matchUIScreen;
+    [SerializeField] Transform _playerBannerContainer;
+
+    [SerializeField] GameObject _playerBanner;
+
 
     public MatchInfo matchInfo;
 
@@ -27,4 +31,7 @@ public class MatchUIManager : MonoBehaviour
     {
 
     }
+
+    // [ClientCallback]
+    // public IEnumerator ShowMatchmakedScreen()
 }

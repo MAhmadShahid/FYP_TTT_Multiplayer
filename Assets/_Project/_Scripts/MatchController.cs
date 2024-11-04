@@ -6,7 +6,9 @@ using System.Collections.Generic;
 public class MatchController : NetworkBehaviour
 {
 
-    internal SyncDictionary<NetworkIdentity, PlayerStruct> matchPlayers = new SyncDictionary<NetworkIdentity, PlayerStruct>();
+    internal readonly SyncDictionary<NetworkIdentity, PlayerStruct> matchPlayers = new SyncDictionary<NetworkIdentity, PlayerStruct>();
+
+    public List<PlayerStruct> _serverPlayerList = new List<PlayerStruct>();
 
     [Header("GUIReferences")]
     CanvasController _canvasController;
