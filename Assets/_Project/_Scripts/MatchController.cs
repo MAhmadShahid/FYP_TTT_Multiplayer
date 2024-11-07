@@ -42,6 +42,7 @@ public class MatchController : NetworkBehaviour
     public override void OnStartClient()
     {
         _uiManager.matchInfo = matchInfo;
+        _stageManager.matchInfo = matchInfo;
         UtilityClass.LogMessages("MatchController: OnStartClient");
 
         UtilityClass.LogMessages($"MatchInfo: {matchInfo.name}\n Mode: {matchInfo.mode}\n");

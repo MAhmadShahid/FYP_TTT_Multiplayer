@@ -14,6 +14,9 @@ public class StageManager : MonoBehaviour
     public void OnStartClient()
     {
         _currentStageObject = Instantiate(_templateStagePrefab);
+        var stageScript = _currentStageObject.GetComponentInChildren<StageVisualScript>();
+        stageScript.CreateGridLines(matchInfo.gridSize);
+
         // do grid initialization
     }
 }
