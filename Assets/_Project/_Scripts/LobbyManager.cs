@@ -30,10 +30,11 @@ public class LobbyManager : MonoBehaviour
     #region quick join matchmaking parameters
     float _matchmakingRate = 10.0f;
 
-    // classic mode constraints
-    int _minPlayerCount = 2;
-    int _maxPlayerCount = 7;
-
+    Dictionary<GridTier, Tuple<int, int>> constraints = new Dictionary<GridTier, Tuple<int, int>>
+    {
+        [GridTier.Low] = new Tuple<int, int>(2, 4),
+        [GridTier.High] = new Tuple<int, int>(2, 6)
+    };
     
 
     #endregion
@@ -89,17 +90,21 @@ public class LobbyManager : MonoBehaviour
             int randomTryOnSameBatch = 2; // make sure to reset this as well
             int randomInteger = 0;
 
-            while (queue.Count >= _minPlayerCount)
+            var tierConstraint = constraints[keyValuePair.Key];
+            var minPlayerCount = tierConstraint.Item1;
+            var maxPlayerCount = tierConstraint.Item2;
+
+            while (queue.Count >= minPlayerCount)
             {
                 // if only bare minimum avaialable, proceed to matchmaking
-                if (queue.Count == _minPlayerCount)
+                if (queue.Count == minPlayerCount)
                 {
-                    ExtractPlayerForMatch(mode, keyValuePair.Key, _minPlayerCount, keyValuePair.Value);
+                    ExtractPlayerForMatch(mode, keyValuePair.Key, minPlayerCount, keyValuePair.Value);
                     break;
                 }
 
                 // decide how many players will be in this match instance
-                randomInteger = _random.Next(_minPlayerCount, _maxPlayerCount);
+                randomInteger = _random.Next(minPlayerCount, maxPlayerCount);
 
                 if (randomTryOnSameBatch <= 0)
                 {
@@ -124,14 +129,14 @@ public class LobbyManager : MonoBehaviour
                 /* initial while loop*/
                 //while (true)
                 //{
-                //    int randomInteger = _random.Next(2, _maxPlayerCount);
+                //    int randomInteger = _random.Next(2, maxPlayerCount);
                 //    if (queue.Count - randomInteger >= 0)
                 //    {
                 //        ExtractPlayerForMatch(mode, randomInteger, queue);
                 //    }
                 //    else
                 //    {
-                //        if (queue.Count < _minPlayerCount)
+                //        if (queue.Count < minPlayerCount)
                 //            break;
 
                 //        // try generating random number some more
@@ -200,8 +205,6 @@ public class LobbyManager : MonoBehaviour
         List<PlayerStruct> playerList = new List<PlayerStruct>();
         Dictionary<NetworkIdentity, PlayerStruct> matchPlayers = new Dictionary<NetworkIdentity, PlayerStruct>();
 
-        int gridSize = ReturnGridSizeInTier(gridTier);
-        
         foreach (var conn in _matches[matchID])
         {
             PlayerInfo info = _lobby[conn];
@@ -227,7 +230,10 @@ public class LobbyManager : MonoBehaviour
             matchPlayers.Add(currentPlayerPrefab.GetComponent<NetworkIdentity>(), PlayerManager.GetPlayerStructureFromConnection(playerConnection));
         }
 
-        MatchInfo matchInfo = new MatchInfo { mode = mode, gridSize = ReturnGridSizeInTier(gridTier), playerCount = playerList.Count };
+        // decide on grid size
+        int gridSize = ReturnGridSizeInTier(gridTier, playerList.Count);
+
+        MatchInfo matchInfo = new MatchInfo { mode = mode, gridSize = gridSize, playerCount = playerList.Count };
         GameObject matchControllerObject = Instantiate(_matchController);
         matchControllerObject.GetComponent<NetworkMatch>().matchId = matchID;
 
@@ -338,9 +344,18 @@ public class LobbyManager : MonoBehaviour
     #region Helping Function
 
     [ServerCallback]
-    public int ReturnGridSizeInTier(GridTier gridTier)
+    public int ReturnGridSizeInTier(GridTier gridTier, int playerCount)
     {
-        return Configurations.gridTierSizes[gridTier][_random.Next(Configurations.gridTierSizes[gridTier].Count)];
+        var optionCount = Configurations.gridTierSizes[gridTier].Count;
+
+        while (true)
+        {
+            var randomGenerated = _random.Next(optionCount);
+            var gridSizeDecided = Configurations.gridTierSizes[gridTier][randomGenerated];
+
+            if (Configurations.validStages[gridSizeDecided].ContainsKey(playerCount))
+                return gridSizeDecided;
+        }
     }    
 
     #endregion
