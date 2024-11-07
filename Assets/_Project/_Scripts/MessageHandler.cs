@@ -135,6 +135,7 @@ public class MessageHandler : MonoBehaviour
                 }
             case ClientMatchOperation.Start:
                 {
+                    UtilityClass.LogMessages("Starting match; disabled functionality");
                     OnClientStartMatch(message.playerStructInfo);
                     break;
                 }
@@ -200,7 +201,7 @@ public class MessageHandler : MonoBehaviour
     [ClientCallback]
     public void OnClientStartMatch(PlayerStruct[] playersInfo)
     {
-        _canvasController.ShowStartScreen(true, playersInfo);
+        // _canvasController.ShowStartScreen(true, playersInfo);
 
     }
 

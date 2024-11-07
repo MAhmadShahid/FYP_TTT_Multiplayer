@@ -498,7 +498,8 @@ public class RoomManager : MonoBehaviour
         _isRoomOwner = false;
 
         foreach (var slot in _slots)
-            Destroy(slot.gameObject);
+            if(slot.gameObject != null)
+                Destroy(slot.gameObject);
 
         SlotScript.ResetStaticStats();
         Destroy(_startGameButton);

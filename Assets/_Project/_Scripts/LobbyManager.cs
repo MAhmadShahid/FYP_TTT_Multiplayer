@@ -198,9 +198,10 @@ public class LobbyManager : MonoBehaviour
         Debug.Log("Starting Match");
         // information for each player in match
         List<PlayerStruct> playerList = new List<PlayerStruct>();
+        Dictionary<NetworkIdentity, PlayerStruct> matchPlayers = new Dictionary<NetworkIdentity, PlayerStruct>();
+
         int gridSize = ReturnGridSizeInTier(gridTier);
         
-
         foreach (var conn in _matches[matchID])
         {
             PlayerInfo info = _lobby[conn];
@@ -223,13 +224,29 @@ public class LobbyManager : MonoBehaviour
             NetworkServer.AddPlayerForConnection(playerConnection, currentPlayerPrefab);
             
             playerConnection.Send(new ClientMatchMessage { clientSideOperation = ClientMatchOperation.Start, playerStructInfo = playerList.ToArray() });
+            matchPlayers.Add(currentPlayerPrefab.GetComponent<NetworkIdentity>(), PlayerManager.GetPlayerStructureFromConnection(playerConnection));
         }
 
         MatchInfo matchInfo = new MatchInfo { mode = mode, gridSize = ReturnGridSizeInTier(gridTier), playerCount = playerList.Count };
         GameObject matchControllerObject = Instantiate(_matchController);
-        matchControllerObject.GetComponent<MatchController>().matchInfo = matchInfo;
         matchControllerObject.GetComponent<NetworkMatch>().matchId = matchID;
+
+        MatchController matchController = matchControllerObject.GetComponent<MatchController>();
+        matchController.matchInfo = matchInfo;
+
+        foreach (var player in matchPlayers)
+        {
+            matchController.matchPlayers.Add(player.Key, player.Value);
+            matchController.playerTurnQueue.Add(player.Key);
+        }
+
+        matchController.ShuffleList();
+
         NetworkServer.Spawn(matchControllerObject);
+
+
+        
+
 
         // Testing spawn
         //GameObject matchSpecificObject = Instantiate(_demoMarker);
