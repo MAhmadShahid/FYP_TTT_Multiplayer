@@ -125,32 +125,6 @@ public class LobbyManager : MonoBehaviour
                 }
                     
             }
-
-                /* initial while loop*/
-                //while (true)
-                //{
-                //    int randomInteger = _random.Next(2, maxPlayerCount);
-                //    if (queue.Count - randomInteger >= 0)
-                //    {
-                //        ExtractPlayerForMatch(mode, randomInteger, queue);
-                //    }
-                //    else
-                //    {
-                //        if (queue.Count < minPlayerCount)
-                //            break;
-
-                //        // try generating random number some more
-                //        else if (randomTryOnSameBatch != 0)
-                //        {
-                //            randomTryOnSameBatch--;
-                //            continue;
-                //        }
-
-                //        // just match the players left
-                //        ExtractPlayerForMatch(mode, queue.Count, queue);
-                //        break;
-                //    }
-                //}
         }
 
         yield return null;
@@ -200,7 +174,7 @@ public class LobbyManager : MonoBehaviour
     [ServerCallback]
     void StartMatch(Guid matchID, GameMode mode, GridTier gridTier)
     {
-        Debug.Log("Starting Match");
+
         // information for each player in match
         List<PlayerStruct> playerList = new List<PlayerStruct>();
         Dictionary<NetworkIdentity, PlayerStruct> matchPlayers = new Dictionary<NetworkIdentity, PlayerStruct>();
@@ -247,12 +221,8 @@ public class LobbyManager : MonoBehaviour
         }
 
         matchController.ShuffleList();
-
         NetworkServer.Spawn(matchControllerObject);
-
-
-        
-
+        matchController.currentPlayer = matchController.playerTurnQueue[0];
 
         // Testing spawn
         //GameObject matchSpecificObject = Instantiate(_demoMarker);

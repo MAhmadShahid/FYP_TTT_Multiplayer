@@ -16,6 +16,14 @@ public class MatchUIManager : MonoBehaviour
     [SerializeField] Canvas _matchCanvas;
     [SerializeField] GameObject _matchUIScreen, _matchmakedScreen, _topPanel;
 
+    [Header("WinnerScreenReferences")]
+    [SerializeField] GameObject _winnerScreenObject;
+    [SerializeField] Image _winnerAvatar;
+    [SerializeField] TextMeshProUGUI _winnerNameText;
+
+    [Header("DrawScreenReferences")]
+    [SerializeField] GameObject _drawScreenObject;
+
     [Header("Matchmaking Screen Variables")]
     [SerializeField] GameObject _playerBannerPrefab;
     [SerializeField] Transform _playerBannerContainer;
@@ -24,6 +32,7 @@ public class MatchUIManager : MonoBehaviour
     [SerializeField] TextMeshProUGUI _gameModeText;
     [SerializeField] TextMeshProUGUI _gridSizeText;
     [SerializeField] RectTransform _winConditionPrefab,  _linePrefab, _winContainer, _rowContainer;
+    [SerializeField] GameObject _yourTurnObject;
 
     [SerializeField] GameObject _matchPlayerCardPrefab;
     [SerializeField] Transform _currentPlayerContainer, _otherPlayerContainer;
@@ -117,20 +126,34 @@ public class MatchUIManager : MonoBehaviour
             matchPlayerCardScripts.Add(playerCard.GetComponent<MatchPlayerCardScript>());
         }
 
-        UpdatePlayerTurnUI();
+        UpdatePlayerTurnUI(0);
     }
 
-    public void UpdatePlayerTurnUI()
+    public void UpdatePlayerTurnUI(int currentPlayerIndex)
     {
-
-        for (int count = 0; count < _matchController.playerTurnQueue.Count; count++)
+        for (int count = 0; count < matchPlayerCardScripts.Count; count++)
         {
-            var playerIdentity = _matchController.playerTurnQueue[count];
+            var playerIdentity = _matchController.playerTurnQueue[currentPlayerIndex];
             var player = _matchController.matchPlayers[playerIdentity];
             var cardScript = matchPlayerCardScripts[count];
 
             cardScript.UpdateMatchCard(player.name, null, false);
+
+            currentPlayerIndex = (currentPlayerIndex + 1) % _matchController.playerTurnQueue.Count;
         }
+
+        _yourTurnObject.SetActive(_matchController.currentPlayer.isLocalPlayer);
+    }
+
+    public void ShowWinnerScreen(PlayerStruct winner)
+    {
+        _winnerScreenObject.SetActive(true);
+        _winnerNameText.text = winner.name;
+    }
+
+    public void ShowDrawScreen()
+    {
+        _drawScreenObject.SetActive(true);
     }
 
     // [ClientCallback]

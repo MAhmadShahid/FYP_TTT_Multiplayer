@@ -360,7 +360,7 @@ public class RoomManager : MonoBehaviour
     #region Room View
     public void InitializeRoomView(Room room, bool forOwner, PlayerStruct[] participants = null)
     {
-        UtilityClass.LogMessages(
+        UtilityClass.LogMessages(true, 
             "Client: Initializing Room View",
             $"Client Room Setttings: {room.roomName}, {room.roomId}, {room.gameMode}, {room.gridSize}",
             $"Is room owner? {forOwner}"
@@ -418,6 +418,7 @@ public class RoomManager : MonoBehaviour
 
     public void UpdateRoomView(Room room, PlayerStruct[] participants = null)
     {
+        UtilityClass.LogMessages(true, $"Room view updating: {room.roomId}");
         SlotScript.ResetStaticStats();
 
         _localRoom = room;
@@ -493,6 +494,7 @@ public class RoomManager : MonoBehaviour
     [ClientCallback]
     public void OnClientLeaveRoom()
     {
+        UtilityClass.LogMessages("Client leaving room");
         // reset room view
         _localRoom = new Room();
         _isRoomOwner = false;
@@ -502,8 +504,12 @@ public class RoomManager : MonoBehaviour
                 Destroy(slot.gameObject);
 
         SlotScript.ResetStaticStats();
-        Destroy(_startGameButton);
-        Destroy(_roomInfoButton);
+
+        if(_startGameButton != null)
+            Destroy(_startGameButton.gameObject);
+        
+        if(_roomInfoButton != null)
+            Destroy(_roomInfoButton.gameObject);
 
         _startGameButton = null;
         _roomInfoButton = null;
