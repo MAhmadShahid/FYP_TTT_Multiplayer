@@ -285,7 +285,7 @@ namespace TicTacToe
     #endregion
 
     #region Others
-    [System.Serializable]
+    [Serializable]
     public struct OnlineMatchInfo
     {
         public GameMode mode;
@@ -300,6 +300,7 @@ namespace TicTacToe
         public GameMode mode;
         public int gridSize;
         public int playerCount;
+        public Lobby lobby;
     }
 
     [Serializable]
@@ -309,6 +310,14 @@ namespace TicTacToe
         public int gridSize;
         public int participants;
         public int blitzSeconds;
+    }
+
+    [Serializable]
+    public enum GameStatus
+    {
+        Won,
+        Draw,
+        Forfeit
     }
 
     #endregion

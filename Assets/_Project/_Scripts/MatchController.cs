@@ -2,15 +2,13 @@ using UnityEngine;
 using Mirror;
 using TicTacToe;
 using System.Collections.Generic;
-using Org.BouncyCastle.Asn1.Mozilla;
-using HelloWorld;
 using System;
-using Org.BouncyCastle.Bcpg;
-using JetBrains.Annotations;
+using System.Collections;
+using UnityEngine.UI;
 
 public class MatchController : NetworkBehaviour
 {
-
+    public Dictionary<NetworkIdentity, NetworkConnectionToClient> connectionIdentityMapping = new Dictionary<NetworkIdentity, NetworkConnectionToClient>();
     internal readonly SyncDictionary<NetworkIdentity, PlayerStruct> matchPlayers = new SyncDictionary<NetworkIdentity, PlayerStruct>();
     public Dictionary<int, NetworkIdentity> cellOwners = new Dictionary<int, NetworkIdentity>();
 
@@ -20,6 +18,7 @@ public class MatchController : NetworkBehaviour
     CanvasController _canvasController;
     [ReadOnly, SerializeField] MatchUIManager _uiManager;
     [ReadOnly, SerializeField] StageManager _stageManager;
+    [SerializeField] Button _rematchButton, _returnButton;
 
     [SyncVar]
     internal MatchInfo matchInfo;
@@ -41,36 +40,67 @@ public class MatchController : NetworkBehaviour
         base.OnStartServer();
     }
 
-    [ServerCallback]
-    public void DecidePlayerTurns()
-    {
-
-    }
-
 
     public override void OnStartClient()
     {
         _uiManager.matchInfo = matchInfo;
         _stageManager.matchInfo = matchInfo;
-        UtilityClass.LogMessages("MatchController: OnStartClient");
 
+        UtilityClass.LogMessages("MatchController: OnStartClient");
         UtilityClass.LogMessages($"MatchInfo: {matchInfo.name}\n Mode: {matchInfo.mode}\n");
         UtilityClass.LogMessages($"GridSize: {matchInfo.gridSize}\nPlayerCount: {matchInfo.playerCount}");
 
         _canvasController = FindObjectOfType<CanvasController>();
         if (_canvasController != null)
-            UtilityClass.LogMessages("Object found");
+            Debug.LogWarning("MatchController couldn't find canvas controller");
+
+        SetupClientSide();
+    }
+
+    [ClientCallback]
+    public void SetupClientSide()
+    {
+        _rematchButton.gameObject.SetActive(false);
+        _returnButton.gameObject.SetActive(false);
 
         _canvasController.gameObject.SetActive(false);
         StartCoroutine(_uiManager.OnStartClient());
-        UtilityClass.LogMessages("starting stage manager");
         _stageManager.OnStartClient();
     }
 
-    public void AddPlayersToMatchController()
+    [ServerCallback]
+    public void OnPlayerDisconnects(NetworkConnectionToClient playerConnection)
     {
+        NetworkIdentity playerIdentity = null;
+        
+        foreach( var identity in matchPlayers.Keys )
+            if (connectionIdentityMapping[identity] == playerConnection)
+                playerIdentity = identity;
 
+
+        if( playerIdentity != null )
+        {
+            UtilityClass.LogMessages("Player to kick found");
+
+            var playerIndex = GetIdentitiesIndexFromList(currentPlayer);
+            matchPlayers.Remove(playerIdentity);
+            playerTurnQueue.Remove(playerIdentity);
+
+            if (playerTurnQueue.Count == 1)
+            {
+                UtilityClass.LogMessages("Match doesn't have enough players, wrapping up");
+                WrapMatchUp(GameStatus.Forfeit, playerIdentity);
+                return;
+            }
+                
+            if(currentPlayer == playerIdentity)
+                currentPlayer = playerTurnQueue[(playerIndex) % playerTurnQueue.Count]; // not adding 1 because queue size got reduced
+        
+        }
+        else
+            UtilityClass.LogMessages("Player to kick NOT FOUND");
     }
+
 
     #region Commands & RPCS
 
@@ -84,18 +114,76 @@ public class MatchController : NetworkBehaviour
         RPC_UpdateClientBoardState(cellValue, playedBy.identity);
 
         if (CheckWin(cellValue, playedBy.identity))
-            RPC_ShowWinner(currentPlayer);
+            WrapMatchUp(GameStatus.Won, currentPlayer);
         // if the board is full
         else if(cellOwners.Keys.Count == matchInfo.gridSize * matchInfo.gridSize)
-            RPC_ShowDraw();
+            WrapMatchUp(GameStatus.Draw);
         else
         {
             int playerIndexInList = GetIdentitiesIndexFromList(currentPlayer);
             currentPlayer = playerTurnQueue[(playerIndexInList + 1) % playerTurnQueue.Count];
         }
 
+    }
 
+    [ServerCallback]
+    public void WrapMatchUp(GameStatus status, NetworkIdentity player = null)
+    {
+        switch(status)
+        {
+            case GameStatus.Won:
+                RPC_ShowWinner(player);
+                break;
+            case GameStatus.Draw:
+                RPC_ShowDraw();
+                break;
+            case GameStatus.Forfeit:
+                RPC_PlayerForfeited();
+                StartCoroutine(ServerEndMatch());
+                break;
+        }
         
+
+    }
+
+    [ServerCallback]
+    public IEnumerator ServerEndMatch()
+    {
+        UtilityClass.LogMessages("Ending Match");
+        RPC_EndMatch(); // client match controller will clean up.
+        yield return new WaitForSeconds(0.1f); // and wait for it.
+         
+        LobbyManager._instance.OnPlayerDisconnected -= OnPlayerDisconnects;
+
+        foreach(var playerIdentity in matchPlayers.Keys)
+        {
+            NetworkConnectionToClient conn = playerIdentity.connectionToClient;
+            NetworkServer.RemovePlayerForConnection(conn, RemovePlayerOptions.Destroy);
+
+            // add server end match for room as well.
+            // change player status for the lobby they came from
+
+            if(matchInfo.lobby == Lobby.QuickLobby)
+            {
+                PlayerInfo playerInfo = LobbyManager._lobby[conn];
+                playerInfo.playerState = PlayerState.QuickJoinLobby;
+                LobbyManager._lobby[conn] = playerInfo;
+            }
+
+            PlayerManager.RemovePlayerFromLobby(conn);
+        }
+
+        yield return null;
+        NetworkServer.Destroy(gameObject);
+    }
+
+    [ClientRpc]
+    public void RPC_EndMatch()
+    {
+        UtilityClass.LogMessages("Ending match on client side");
+
+        _canvasController.InitializeCanvasOnline();
+        _canvasController.gameObject.SetActive(true);  
     }
 
     [ClientRpc]
@@ -117,6 +205,19 @@ public class MatchController : NetworkBehaviour
     public void RPC_ShowDraw()
     {
         _uiManager.ShowDrawScreen();
+    }
+
+    [ClientRpc]
+    public void RPC_PlayerForfeited()
+    {
+        UtilityClass.LogMessages($"Player forfeited: isLocalPlayer");
+    }
+
+
+    [ClientRpc]
+    public void RPC_OnPlayerDisconnected()
+    {
+
     }
     #endregion
 

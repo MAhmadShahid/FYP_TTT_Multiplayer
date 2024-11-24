@@ -3,6 +3,7 @@ using UnityEngine;
 using Mirror;
 using TicTacToe;
 using TMPro;
+using System.Collections;
 
 public class MyNetworkManager : NetworkManager
 {
@@ -66,8 +67,14 @@ public class MyNetworkManager : NetworkManager
 
     public override void OnServerDisconnect(NetworkConnectionToClient conn)
     {
+        PlayerManager.OnPlayerDisconnect(conn);
+        StartCoroutine(DelayedOnServerDisconnect(conn));
+    }
+
+    public IEnumerator DelayedOnServerDisconnect(NetworkConnectionToClient conn)
+    {
+        yield return new WaitForSeconds(.2f);
         base.OnServerDisconnect(conn);
-        PlayerManager.OnPlayerDisconnect(conn); 
     }
 
     public override void OnStartClient()

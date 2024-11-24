@@ -70,9 +70,9 @@ public class PlayerManager : MonoBehaviour
     public static void OnPlayerConnect(NetworkConnectionToClient clientConnection)
     {
         Guid playerID = Guid.NewGuid();
-        Player player = new Player (playerID, clientConnection, PlayerManager.GeneratePlayerName(), PlayerState.Online);
-        PlayerManager._instance._onlinePlayers.Add(playerID, player);
-        PlayerManager._instance._playerConnectionMapping.Add(clientConnection, playerID);
+        Player player = new Player (playerID, clientConnection, GeneratePlayerName(), PlayerState.Online);
+        _instance._onlinePlayers.Add(playerID, player);
+        _instance._playerConnectionMapping.Add(clientConnection, playerID);
 
         Debug.Log("Player Connected To Server: ");
         Debug.Log($"Name: {player.name}; Connection: {clientConnection}");
@@ -89,7 +89,7 @@ public class PlayerManager : MonoBehaviour
             return;
         }    
 
-        Player player = PlayerManager._instance._onlinePlayers[playerID];
+        Player player = _instance._onlinePlayers[playerID];
 
         if(player == null)
         {
@@ -151,9 +151,8 @@ public class PlayerManager : MonoBehaviour
             Debug.LogWarning("Player doesn't exist in online pool");
             return;
         }
-            
-        PlayerManager manager = PlayerManager._instance;
-        Player player = manager._onlinePlayers[manager._playerConnectionMapping[clientConnection]];
+
+        Player player = _instance._onlinePlayers[_instance._playerConnectionMapping[clientConnection]];
 
         if (player.state == PlayerState.Online)
         {

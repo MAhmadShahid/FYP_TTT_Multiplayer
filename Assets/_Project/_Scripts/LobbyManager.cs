@@ -1,5 +1,4 @@
 using Mirror;
-using Org.BouncyCastle.Bcpg;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,11 +8,13 @@ using UnityEngine;
 
 public class LobbyManager : MonoBehaviour
 {
-    private static LobbyManager _instance;
-    internal static Dictionary<NetworkConnectionToClient, PlayerInfo> _lobby = new Dictionary<NetworkConnectionToClient, PlayerInfo>();
+    public static LobbyManager _instance;
+    public static Dictionary<NetworkConnectionToClient, PlayerInfo> _lobby = new Dictionary<NetworkConnectionToClient, PlayerInfo>();
 
     internal Dictionary<GameMode, Dictionary<GridTier, Queue<NetworkConnectionToClient>>> _queues = new Dictionary<GameMode, Dictionary<GridTier, Queue<NetworkConnectionToClient>>>();
     internal Dictionary<Guid, HashSet<NetworkConnectionToClient>> _matches = new Dictionary<Guid, HashSet<NetworkConnectionToClient>>();
+
+    public event Action<NetworkConnectionToClient> OnPlayerDisconnected;
 
     System.Random _random = new System.Random();
     LinkedList<NetworkConnectionToClient> queue = new LinkedList<NetworkConnectionToClient>();
@@ -64,7 +65,7 @@ public class LobbyManager : MonoBehaviour
     [ServerCallback]
     public void OnStartServer()
     {
-        Debug.Log("Fired on start server: Lobby Manager");
+        //Debug.Log("Fired on start server: Lobby Manager");
         InvokeRepeating("StartMatchmaking", 1.0f, _matchmakingRate);
     }
 
@@ -73,7 +74,7 @@ public class LobbyManager : MonoBehaviour
     [ServerCallback]
     void StartMatchmaking()
     {
-        Debug.Log("Invoked Matchmaking ...");
+        //Debug.Log("Invoked Matchmaking ...");
         // run these in parallel and wait for all of them to finish
         Coroutine classic = StartCoroutine(PerformNormalModeMatchmaking(GameMode.Classic));
         Coroutine blitz = StartCoroutine(PerformNormalModeMatchmaking(GameMode.Blitz));
@@ -81,11 +82,11 @@ public class LobbyManager : MonoBehaviour
 
     IEnumerator PerformNormalModeMatchmaking(GameMode mode)
     {
-        Debug.Log($"Matchmaking for: {mode}");
+        //Debug.Log($"Matchmaking for: {mode}");
 
         foreach ( var keyValuePair in _queues[mode] ) // var queue in _queues[mode].Values
         {
-            UtilityClass.LogMessages($"Key: {keyValuePair.Key} Value: {keyValuePair}");
+            //UtilityClass.LogMessages($"Key: {keyValuePair.Key} Value: {keyValuePair}");
             var queue = keyValuePair.Value;
             int randomTryOnSameBatch = 2; // make sure to reset this as well
             int randomInteger = 0;
@@ -141,15 +142,13 @@ public class LobbyManager : MonoBehaviour
         Guid matchID = Guid.NewGuid();
         _matches.Add(matchID, new HashSet<NetworkConnectionToClient>());
 
-        
-
         for (int playerIndex = 0; playerIndex < numberofPlayers; playerIndex++)
         {
             NetworkConnectionToClient playerConnection;
             
             if(!queue.TryDequeue(out playerConnection))
             {
-                Debug.Log("Race Condition: Queue has less number of player than required. This may be caused when the last player has disconnected (queues get rebuilt upon player disconnection)");
+                Debug.LogWarning("Race Condition: Queue has less number of player than required. This may be caused when the last player has disconnected (queues get rebuilt upon player disconnection)");
                 AbortMatch(matchID);
                 return;
             }
@@ -163,6 +162,8 @@ public class LobbyManager : MonoBehaviour
             }
 
             player.playerState = PlayerState.UndergoingMatchmaking;
+            _lobby[playerConnection] = player;
+
             _matches[matchID].Add(playerConnection);
 
             Debug.Log($"Adding: {playerConnection} to match: {matchID}");
@@ -178,6 +179,7 @@ public class LobbyManager : MonoBehaviour
         // information for each player in match
         List<PlayerStruct> playerList = new List<PlayerStruct>();
         Dictionary<NetworkIdentity, PlayerStruct> matchPlayers = new Dictionary<NetworkIdentity, PlayerStruct>();
+        Dictionary<NetworkIdentity, NetworkConnectionToClient> connectionIdentityMapping = new Dictionary<NetworkIdentity, NetworkConnectionToClient>();
 
         foreach (var conn in _matches[matchID])
         {
@@ -190,6 +192,9 @@ public class LobbyManager : MonoBehaviour
                 return;
             }
 
+            info.playerState = PlayerState.Playing;
+            _lobby[conn] = info;
+
             playerList.Add(player);
         }
             
@@ -201,16 +206,20 @@ public class LobbyManager : MonoBehaviour
             NetworkServer.AddPlayerForConnection(playerConnection, currentPlayerPrefab);
             
             playerConnection.Send(new ClientMatchMessage { clientSideOperation = ClientMatchOperation.Start, playerStructInfo = playerList.ToArray() });
+            connectionIdentityMapping.Add(currentPlayerPrefab.GetComponent<NetworkIdentity>(), playerConnection);
             matchPlayers.Add(currentPlayerPrefab.GetComponent<NetworkIdentity>(), PlayerManager.GetPlayerStructureFromConnection(playerConnection));
         }
 
         // decide on grid size
         int gridSize = ReturnGridSizeInTier(gridTier, playerList.Count);
 
-        MatchInfo matchInfo = new MatchInfo { mode = mode, gridSize = gridSize, playerCount = playerList.Count };
+        MatchInfo matchInfo = new MatchInfo { mode = mode, gridSize = gridSize, playerCount = playerList.Count, lobby = Lobby.QuickLobby };
+        
+        // instantiating + assigning match id
         GameObject matchControllerObject = Instantiate(_matchController);
         matchControllerObject.GetComponent<NetworkMatch>().matchId = matchID;
 
+        // prepping all relevant data
         MatchController matchController = matchControllerObject.GetComponent<MatchController>();
         matchController.matchInfo = matchInfo;
 
@@ -218,11 +227,16 @@ public class LobbyManager : MonoBehaviour
         {
             matchController.matchPlayers.Add(player.Key, player.Value);
             matchController.playerTurnQueue.Add(player.Key);
+            matchController.connectionIdentityMapping.Add(player.Key, connectionIdentityMapping[player.Key]);
         }
 
         matchController.ShuffleList();
+
+        // spawning on client side after data is loaded
         NetworkServer.Spawn(matchControllerObject);
+        // updating current player
         matchController.currentPlayer = matchController.playerTurnQueue[0];
+        _instance.OnPlayerDisconnected += matchController.OnPlayerDisconnects;
 
         // Testing spawn
         //GameObject matchSpecificObject = Instantiate(_demoMarker);
@@ -250,7 +264,12 @@ public class LobbyManager : MonoBehaviour
     public static void AddPlayerToLobby(NetworkConnectionToClient connection)
     {
         if (!_lobby.ContainsKey(connection))
-            _lobby.Add(connection, new PlayerInfo());
+        {
+            PlayerInfo playerInfo = new PlayerInfo();
+            playerInfo.playerState = PlayerState.QuickJoinLobby;
+            _lobby.Add(connection, playerInfo);
+        }
+            
 
         else
             Debug.Log("Player already in the lobby");
@@ -259,6 +278,7 @@ public class LobbyManager : MonoBehaviour
     [ServerCallback]
     public static void RemovePlayerFromLobby(NetworkConnectionToClient connection, bool disconnecting = false)
     {
+        // is the player in this lobby
         if (!_lobby.ContainsKey(connection))
         {
             Debug.Log("Player isn't in quick join lobby");
@@ -267,18 +287,25 @@ public class LobbyManager : MonoBehaviour
         
         // changing player state
         PlayerInfo playerInfo = _lobby[connection];
+        PlayerState currentState = playerInfo.playerState;
         playerInfo.playerState = PlayerState.Leaving;
+        _lobby[connection] = playerInfo;
 
-        Debug.Log($"Removing From Quick Join: {connection}");
-
+        Debug.Log($"Removing From Quick Join: {connection}, Current State: {currentState}");
         _lobby.Remove(connection);
 
-        if(playerInfo.playerPreference.mode != GameMode.None && playerInfo.playerPreference.gridTier != GridTier.None)
-            _instance._queues[playerInfo.playerPreference.mode][playerInfo.playerPreference.gridTier] = new Queue<NetworkConnectionToClient>(
-                _instance._queues[playerInfo.playerPreference.mode][playerInfo.playerPreference.gridTier]
-                .Where(s => s != connection)
-            );
-
+        // removing the player from queue
+        // test flow when player disconnects in between
+        if (currentState == PlayerState.Inqueue)
+            if(playerInfo.playerPreference.mode != GameMode.None && playerInfo.playerPreference.gridTier != GridTier.None)
+                _instance._queues[playerInfo.playerPreference.mode][playerInfo.playerPreference.gridTier] = new Queue<NetworkConnectionToClient>(
+                    _instance._queues[playerInfo.playerPreference.mode][playerInfo.playerPreference.gridTier]
+                    .Where(s => s != connection)
+                );
+        
+        // removing player from match
+        if (currentState == PlayerState.Playing)
+            _instance.OnPlayerDisconnected?.Invoke(connection);
 
     }
 
