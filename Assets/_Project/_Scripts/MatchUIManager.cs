@@ -5,6 +5,7 @@ using UnityEngine;
 using Mirror;
 using UnityEngine.UI;
 using TMPro;
+using System.Text.RegularExpressions;
 
 public class MatchUIManager : MonoBehaviour
 {
@@ -15,6 +16,7 @@ public class MatchUIManager : MonoBehaviour
     [Header("GUIReferences")]
     [SerializeField] Canvas _matchCanvas;
     [SerializeField] GameObject _matchUIScreen, _matchmakedScreen, _topPanel;
+    [SerializeField] Button _leaveButton, _settingButton;
 
     [Header("WinnerScreenReferences")]
     [SerializeField] GameObject _winnerScreenObject;
@@ -110,16 +112,15 @@ public class MatchUIManager : MonoBehaviour
 
         RectTransform lineImage = Instantiate(_linePrefab, _winContainer);
         lineImage.sizeDelta = new Vector2((winConditionCount * 75) + 125, lineImage.sizeDelta.y);
-        
+
         // current player card
         var currentPlayerCard = Instantiate(_matchPlayerCardPrefab, _currentPlayerContainer);
         RectTransform currentPlayerCardTransform = currentPlayerCard.GetComponent<RectTransform>();
-        //currentPlayerCardTransform.sizeDelta = new Vector2(100, 100);
         currentPlayerCardTransform.localPosition = new Vector2(-346, 0);
         currentPlayerCardTransform.localScale = new Vector3(1.5f, 1.5f, 1);
         matchPlayerCardScripts.Add(currentPlayerCard.GetComponent<MatchPlayerCardScript>());
-        
-        for(int count = 0; count < matchInfo.playerCount - 1; count++)
+
+        for (int count = 0; count < matchInfo.playerCount - 1; count++)
         {
             var playerCard = Instantiate(_matchPlayerCardPrefab, _otherPlayerContainer);
             RectTransform cardTransform = playerCard.GetComponent<RectTransform>();
@@ -133,6 +134,7 @@ public class MatchUIManager : MonoBehaviour
     {
         for (int count = 0; count < matchPlayerCardScripts.Count; count++)
         {
+            Debug.Log($"Loop count: {count}, currentPlayerIndex: {currentPlayerIndex}");
             var playerIdentity = _matchController.playerTurnQueue[currentPlayerIndex];
             var player = _matchController.matchPlayers[playerIdentity];
             var cardScript = matchPlayerCardScripts[count];
@@ -145,6 +147,15 @@ public class MatchUIManager : MonoBehaviour
         _yourTurnObject.SetActive(_matchController.currentPlayer.isLocalPlayer);
     }
 
+    public void OnPlayerLeft(int currentPlayerIndex)
+    {
+        int count = _matchController.matchPlayers.Count;
+        Destroy(matchPlayerCardScripts[count - 1].gameObject);
+        matchPlayerCardScripts.RemoveAt(count - 1);
+
+        UpdatePlayerTurnUI(currentPlayerIndex);
+    }
+
     public void ShowWinnerScreen(PlayerStruct winner)
     {
         _winnerScreenObject.SetActive(true);
@@ -154,6 +165,11 @@ public class MatchUIManager : MonoBehaviour
     public void ShowDrawScreen()
     {
         _drawScreenObject.SetActive(true);
+    }
+
+    public void OnLeaveButtonPressed()
+    {
+        _matchController.CommandRequestToLeave();
     }
 
     // [ClientCallback]

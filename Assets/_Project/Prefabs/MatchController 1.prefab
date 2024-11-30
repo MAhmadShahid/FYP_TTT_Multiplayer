@@ -2190,11 +2190,12 @@ MonoBehaviour:
   syncDirection: 0
   syncMode: 0
   syncInterval: 0
+  roomOwner: {fileID: 0}
+  currentPlayer: {fileID: 0}
   _uiManager: {fileID: 4014278168295020161}
   _stageManager: {fileID: 4014278169095089079}
   _rematchButton: {fileID: 251443963852618658}
   _returnButton: {fileID: 5923995189308671381}
-  currentPlayer: {fileID: 0}
 --- !u!1 &4014278168230432437
 GameObject:
   m_ObjectHideFlags: 0
@@ -2392,6 +2393,8 @@ MonoBehaviour:
   _matchUIScreen: {fileID: 173532919035258536}
   _matchmakedScreen: {fileID: 173532918798820913}
   _topPanel: {fileID: 4014278169024616914}
+  _leaveButton: {fileID: 399896716243391979}
+  _settingButton: {fileID: 399896715913735557}
   _winnerScreenObject: {fileID: 6439247058498153276}
   _winnerAvatar: {fileID: 532155480515445209}
   _winnerNameText: {fileID: 5715062318765553294}
@@ -4494,6 +4497,17 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 3618962568328869140, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
   m_PrefabInstance: {fileID: 4014278169024485520}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &399896715913735557 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+  m_PrefabInstance: {fileID: 4014278169024485520}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &4014278169223045374
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4605,6 +4619,34 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Mode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
+      value: 
+      objectReference: {fileID: 4014278168295020161}
+    - target: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_CallState
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
+      value: OnLeaveButtonPressed
+      objectReference: {fileID: 0}
+    - target: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: MatchUIManager, Assembly-CSharp
+      objectReference: {fileID: 0}
+    - target: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_ObjectArgumentAssemblyTypeName
+      value: UnityEngine.Object, UnityEngine
+      objectReference: {fileID: 0}
     - target: {fileID: 3618962568328869142, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
       propertyPath: m_Color.b
       value: 0
@@ -4632,6 +4674,17 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 3618962568328869140, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
   m_PrefabInstance: {fileID: 4014278169223045374}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &399896716243391979 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3618962568328869141, guid: f4d46c524f904104b8558e1144a7376b, type: 3}
+  m_PrefabInstance: {fileID: 4014278169223045374}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &6921858306515447936
 PrefabInstance:
   m_ObjectHideFlags: 0

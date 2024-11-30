@@ -86,6 +86,9 @@ public class MessageHandler : MonoBehaviour
             case ServerRoomOperation.Kick:
                 _roomManager.OnServerKickPlayer(connection, message.playerIDs);
                 break;
+            case ServerRoomOperation.Start:
+                _roomManager.OnServerStartMatch(connection, message.roomID);
+                break;
         }
     }
 

@@ -5,32 +5,54 @@ using System.Collections.Generic;
 using System;
 using System.Collections;
 using UnityEngine.UI;
+using JetBrains.Annotations;
+using Org.BouncyCastle.Asn1.Mozilla;
 
 public class MatchController : NetworkBehaviour
 {
-    public Dictionary<NetworkIdentity, NetworkConnectionToClient> connectionIdentityMapping = new Dictionary<NetworkIdentity, NetworkConnectionToClient>();
+    // sync data structures
+    internal readonly SyncList<NetworkIdentity> playerTurnQueue = new SyncList<NetworkIdentity>();
     internal readonly SyncDictionary<NetworkIdentity, PlayerStruct> matchPlayers = new SyncDictionary<NetworkIdentity, PlayerStruct>();
+    
+    // mapping for ease
+    public Dictionary<NetworkIdentity, NetworkConnectionToClient> connectionIdentityMapping = new Dictionary<NetworkIdentity, NetworkConnectionToClient>();
+
+    public NetworkIdentity roomOwner;
+
+    // local variables
     public Dictionary<int, NetworkIdentity> cellOwners = new Dictionary<int, NetworkIdentity>();
 
-    internal readonly SyncList<NetworkIdentity> playerTurnQueue = new SyncList<NetworkIdentity>();
+    // events that define different behaviour depending upon where called from
+    // lobby or room manager defines these events
+    public event Action<Guid> OnMatchEnd;
+    public event Action<Guid, NetworkConnectionToClient> OnPlayerLeave;    
 
-    [Header("GUIReferences")]
-    CanvasController _canvasController;
-    [ReadOnly, SerializeField] MatchUIManager _uiManager;
-    [ReadOnly, SerializeField] StageManager _stageManager;
-    [SerializeField] Button _rematchButton, _returnButton;
-
+    #region Synced Variables
     [SyncVar]
     internal MatchInfo matchInfo;
 
     [SyncVar(hook = nameof(OnCurrentPlayerChanged))]
     [ReadOnly, SerializeField] internal NetworkIdentity currentPlayer;
+    #endregion
+
+    #region Client Side Modules
+    [ReadOnly, SerializeField] MatchUIManager _uiManager;
+    [ReadOnly, SerializeField] StageManager _stageManager;
+    #endregion
+
+    #region GUI References
+    [Header("GUIReferences")]
+    CanvasController _canvasController;
+    [SerializeField] Button _rematchButton, _returnButton;
+    #endregion
+
+
 
     private void Start()
     {
         UtilityClass.LogMessages("Start function code");
     }
-
+     
     #region Mirror Callbacks
 
     [ServerCallback]
@@ -63,28 +85,42 @@ public class MatchController : NetworkBehaviour
         _rematchButton.gameObject.SetActive(false);
         _returnButton.gameObject.SetActive(false);
 
+
         _canvasController.gameObject.SetActive(false);
         StartCoroutine(_uiManager.OnStartClient());
         _stageManager.OnStartClient();
     }
 
+    #endregion
+
+    #region Disconnect Logic
+
     [ServerCallback]
+    // the main match controller player removal function
     public void OnPlayerDisconnects(NetworkConnectionToClient playerConnection)
     {
-        NetworkIdentity playerIdentity = null;
         
-        foreach( var identity in matchPlayers.Keys )
+        NetworkIdentity playerIdentity = null;
+
+        foreach (var identity in matchPlayers.Keys)
             if (connectionIdentityMapping[identity] == playerConnection)
                 playerIdentity = identity;
 
 
-        if( playerIdentity != null )
+        if (playerIdentity != null)
         {
             UtilityClass.LogMessages("Player to kick found");
 
+            // update data structures and replicate on clients
             var playerIndex = GetIdentitiesIndexFromList(currentPlayer);
             matchPlayers.Remove(playerIdentity);
             playerTurnQueue.Remove(playerIdentity);
+
+            // update leaving client
+            TargetRPC_EndMatch(playerConnection);
+
+            // wrap player object for this client
+            NetworkServer.RemovePlayerForConnection(playerConnection, RemovePlayerOptions.Destroy);            
 
             if (playerTurnQueue.Count == 1)
             {
@@ -92,14 +128,43 @@ public class MatchController : NetworkBehaviour
                 WrapMatchUp(GameStatus.Forfeit, playerIdentity);
                 return;
             }
-                
-            if(currentPlayer == playerIdentity)
-                currentPlayer = playerTurnQueue[(playerIndex) % playerTurnQueue.Count]; // not adding 1 because queue size got reduced
-        
+
+            if (currentPlayer == playerIdentity)
+                currentPlayer = playerTurnQueue[playerIndex];
+
+            // update other clients
+            foreach (var identity in matchPlayers.Keys)
+                RPC_PlayerLeft(identity.connectionToClient, playerIndex);
         }
         else
             UtilityClass.LogMessages("Player to kick NOT FOUND");
     }
+
+    [Command(requiresAuthority = false)]
+    public void CommandRequestToLeave(NetworkConnectionToClient player = null)
+    {
+        // lobby or room manager defines these events
+        OnPlayerLeave?.Invoke(matchInfo.matchID, player);
+    }
+
+    [TargetRpc]
+    public void RPC_PlayerLeft(NetworkConnectionToClient targetClient, int currentPlayerIndex)
+    {
+        foreach (var player in matchPlayers.Values)
+            Debug.Log(player.name);
+
+        _uiManager.OnPlayerLeft(currentPlayerIndex);
+    }
+
+
+    [ServerCallback]
+    public void WrapPlayerObject(NetworkIdentity playerIdentity)
+    {
+
+    }
+    #endregion
+
+
 
 
     #region Commands & RPCS
@@ -133,13 +198,14 @@ public class MatchController : NetworkBehaviour
         {
             case GameStatus.Won:
                 RPC_ShowWinner(player);
+                StartCoroutine(ServerEndMatch(0));
                 break;
             case GameStatus.Draw:
                 RPC_ShowDraw();
                 break;
             case GameStatus.Forfeit:
                 RPC_PlayerForfeited();
-                StartCoroutine(ServerEndMatch());
+                StartCoroutine(ServerEndMatch(0));
                 break;
         }
         
@@ -147,13 +213,21 @@ public class MatchController : NetworkBehaviour
     }
 
     [ServerCallback]
-    public IEnumerator ServerEndMatch()
+    public void CleanUpPlayer(NetworkConnectionToClient player = null)
     {
-        UtilityClass.LogMessages("Ending Match");
-        RPC_EndMatch(); // client match controller will clean up.
+
+    }
+
+    [ServerCallback]
+    public IEnumerator ServerEndMatch(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        RPC_EndMatch();                         // client match controller will clean up.
+        
         yield return new WaitForSeconds(0.1f); // and wait for it.
-         
-        LobbyManager._instance.OnPlayerDisconnected -= OnPlayerDisconnects;
+
+        OnMatchEnd?.Invoke(matchInfo.matchID);
 
         foreach(var playerIdentity in matchPlayers.Keys)
         {
@@ -168,12 +242,12 @@ public class MatchController : NetworkBehaviour
                 PlayerInfo playerInfo = LobbyManager._lobby[conn];
                 playerInfo.playerState = PlayerState.QuickJoinLobby;
                 LobbyManager._lobby[conn] = playerInfo;
+                PlayerManager.RemovePlayerFromLobby(conn);
             }
-
-            PlayerManager.RemovePlayerFromLobby(conn);
         }
 
         yield return null;
+        Debug.Log("Destroying match controller on server");
         NetworkServer.Destroy(gameObject);
     }
 
@@ -182,8 +256,18 @@ public class MatchController : NetworkBehaviour
     {
         UtilityClass.LogMessages("Ending match on client side");
 
-        _canvasController.InitializeCanvasOnline();
+        _stageManager.CleanUpStageVisuals();
+        // _canvasController.InitializeCanvasOnline();
         _canvasController.gameObject.SetActive(true);  
+    }
+
+    [TargetRpc]
+    public void TargetRPC_EndMatch(NetworkConnectionToClient player)
+    {
+        _canvasController.InitializeCanvasOnline();
+        _canvasController.gameObject.SetActive(true);
+        // gameObject.SetActive(false);
+        Destroy(gameObject);
     }
 
     [ClientRpc]
@@ -199,16 +283,28 @@ public class MatchController : NetworkBehaviour
         var player = matchPlayers[winner];
         _uiManager.ShowWinnerScreen(player);
         Debug.Log($"Winner: {player.name}");
+
+        _rematchButton.interactable = true;
+        _rematchButton.gameObject.SetActive(true);
+
+        _returnButton.interactable = true;
+        _returnButton.gameObject.SetActive(true);
     }
 
     [ClientRpc]
     public void RPC_ShowDraw()
     {
         _uiManager.ShowDrawScreen();
+
+        _rematchButton.interactable = true;
+        _rematchButton.gameObject.SetActive(true);
+
+        _returnButton.interactable = true;
+        _returnButton.gameObject.SetActive(true);
     }
 
     [ClientRpc]
-    public void RPC_PlayerForfeited()
+    public void RPC_PlayerForfeited() // missing
     {
         UtilityClass.LogMessages($"Player forfeited: isLocalPlayer");
     }
@@ -362,7 +458,7 @@ public class MatchController : NetworkBehaviour
 
     #endregion
 
-
+    
     // Helping functions
     public int GetIdentitiesIndexFromList(NetworkIdentity playerIdentity)
     {
@@ -378,5 +474,4 @@ public class MatchController : NetworkBehaviour
         return (row * matchInfo.gridSize) + column;
     }
 
-    #endregion
 }

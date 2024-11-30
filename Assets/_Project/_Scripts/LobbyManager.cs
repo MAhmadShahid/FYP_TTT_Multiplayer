@@ -213,7 +213,14 @@ public class LobbyManager : MonoBehaviour
         // decide on grid size
         int gridSize = ReturnGridSizeInTier(gridTier, playerList.Count);
 
-        MatchInfo matchInfo = new MatchInfo { mode = mode, gridSize = gridSize, playerCount = playerList.Count, lobby = Lobby.QuickLobby };
+        MatchInfo matchInfo = new MatchInfo 
+        {
+            matchID = matchID,
+            mode = mode, 
+            gridSize = gridSize, 
+            playerCount = playerList.Count, 
+            lobby = Lobby.QuickLobby 
+        };
         
         // instantiating + assigning match id
         GameObject matchControllerObject = Instantiate(_matchController);

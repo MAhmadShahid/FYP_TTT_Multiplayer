@@ -4,12 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using TicTacToe;
 using TMPro;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class RoomManager : MonoBehaviour
 {
     public static RoomManager Instance { get; private set; }
+    public event Action<NetworkConnectionToClient> OnPlayerDisconnected;
 
     Color selectedColor = new Color(195, 121, 0);
 
@@ -53,6 +55,7 @@ public class RoomManager : MonoBehaviour
 
     HashSet<NetworkConnectionToClient> _subscribedRoomInfoClients = new HashSet<NetworkConnectionToClient>();
 
+    [SerializeField] GameObject _matchController;
 
     // Room Listing UI Variables
     Toggle _currentActiveToggle = null;
@@ -92,10 +95,10 @@ public class RoomManager : MonoBehaviour
     [ServerCallback]
     public void OnServerCreateRoom(NetworkConnectionToClient requestingClient)
     {
-        Debug.Log("Passing through checks: server side");
+        // Debug.Log("Passing through checks: server side");
         if(requestingClient == null || _playersRoom.ContainsKey(requestingClient)) return;
 
-        Debug.Log("Successfully passed checks: creating room");
+        // Debug.Log("Successfully passed checks: creating room");
         Player requestingPlayer = PlayerManager.GetPlayerFromConnection(requestingClient);
 
         Guid roomID = Guid.NewGuid();
@@ -147,6 +150,14 @@ public class RoomManager : MonoBehaviour
     }
 
     [ServerCallback]
+
+    public void OnPlayerDisconnect(NetworkConnectionToClient clientConnection)
+    {
+        OnPlayerDisconnected?.Invoke(clientConnection);
+        OnServerRemovePlayerFromRoom(clientConnection);
+    }
+
+    [ServerCallback]
     public void OnServerRemovePlayerFromRoom(NetworkConnectionToClient clientConnection)
     {
 
@@ -173,7 +184,7 @@ public class RoomManager : MonoBehaviour
 
         // if player is a participant in another player's room
         foreach (var room in _roomConnections)
-            if (room.Value.Contains(clientConnection))
+            if (room.Value.Contains(clientConnection) && _openRooms.ContainsKey(room.Key))
             {
                 Room currentRoom = _openRooms[room.Key];
                 Debug.Log($"Removing Player; Room found: {currentRoom.roomName}");
@@ -244,7 +255,7 @@ public class RoomManager : MonoBehaviour
         _subscribedRoomInfoClients.Remove(clientConnection);
         Debug.Log("Removing: player subscription to room");
 
-        OnServerRemovePlayerFromRoom(clientConnection);
+        OnPlayerDisconnect(clientConnection);
     }
 
     [ServerCallback]
@@ -287,6 +298,125 @@ public class RoomManager : MonoBehaviour
         SendUpdatedRoomInfo(clientRoomID);
         SendClientList();
     }
+
+    [ServerCallback]
+    public void OnServerStartMatch(NetworkConnectionToClient clientConnection, Guid roomID)
+    {
+        // check if rooms exist and owner is requesting start match
+        if (!_openRooms.TryGetValue(roomID, out Room room) || _playersRoom[clientConnection] != roomID) return;
+
+        // check if room settings are valid
+        if (
+            (room.currentPlayerCount == room.totalPlayersAllowed) &&                            // full lobby is playing
+            Configurations.validStages.ContainsKey(room.gridSize) &&                           // grid size &
+            Configurations.validStages[room.gridSize].ContainsKey(room.currentPlayerCount)    // participants are valid
+            )
+        {
+
+
+            // loading match information
+            MatchInfo matchInfo = new MatchInfo
+            {
+                matchID = roomID,
+                mode = room.gameMode,
+                gridSize = room.gridSize,
+                playerCount = room.currentPlayerCount,
+                lobby = Lobby.RoomLobby
+            };
+
+            // instantiate match controller
+            GameObject matchControllerObject = Instantiate(_matchController);
+            MatchController matchControllerScript = matchControllerObject.GetComponent<MatchController>();
+
+            matchControllerScript.matchInfo = matchInfo;
+            matchControllerObject.GetComponent<NetworkMatch>().matchId = roomID;
+            OnPlayerDisconnected += matchControllerScript.OnPlayerDisconnects;
+
+            List<PlayerStruct> list = new List<PlayerStruct>();
+
+            foreach (NetworkConnectionToClient client in _roomConnections[roomID])
+            {
+                PlayerStruct player = PlayerManager.GetPlayerStructureFromConnection(client);
+
+                // spawn player object
+                GameObject playerObject = Instantiate(NetworkManager.singleton.playerPrefab);
+                NetworkIdentity playerIdentity = playerObject.GetComponent<NetworkIdentity>();
+                playerObject.GetComponent<NetworkMatch>().matchId = roomID;
+
+                NetworkServer.AddPlayerForConnection(client, playerObject);
+
+                // populate match controller fields
+                matchControllerScript.matchPlayers.Add(playerIdentity, player);
+                matchControllerScript.playerTurnQueue.Add(playerIdentity);
+                matchControllerScript.connectionIdentityMapping.Add(playerIdentity, client);
+
+                // if room owner then
+                if (clientConnection == client)
+                    matchControllerScript.roomOwner = playerIdentity;
+            }
+
+            matchControllerScript.ShuffleList();
+            matchControllerScript.currentPlayer = matchControllerScript.playerTurnQueue[0];
+
+            NetworkServer.Spawn(matchControllerObject);
+
+            // subscribe to events
+            // OnMatchEnd
+            matchControllerScript.OnMatchEnd += (roomid) => {
+                Debug.Log($"Match ended for room: {roomid}");
+
+                OnPlayerDisconnected -= matchControllerScript.OnPlayerDisconnects;
+
+                // update open rooms for all clients
+                _openRooms.Add(roomID, room);
+
+                // send all clients back to room
+                Room[] roomArray = { room };
+                foreach (var player in _roomConnections[roomID])
+                {                    // for room owner
+                    if (_playersRoom.ContainsKey(player) && _playersRoom[player] == roomID)
+                        player.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Created, roomsInfo = roomArray });
+                    // for other players
+                    else
+                        player.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Joined, roomsInfo = roomArray });
+                }
+
+                SendUpdatedRoomInfo(roomid);
+                SendClientList();
+            };
+
+            //OnPlayerLeave
+            matchControllerScript.OnPlayerLeave += (roomid, clientConnection) =>
+            {
+                if (_playersRoom.ContainsKey(clientConnection) && _playersRoom[clientConnection] == roomID)
+                {
+                    StartCoroutine(matchControllerScript.ServerEndMatch(0));
+                    return;
+                }
+
+                matchControllerScript.OnPlayerDisconnects(clientConnection);
+
+                // update lobby data structures and room info
+                OnServerRemovePlayerFromRoom(clientConnection);
+                _roomConnections[roomID].Remove(clientConnection);
+                room.currentPlayerCount--;
+
+                clientConnection.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Left });
+            };
+
+            // update all clients for open rooms
+            _openRooms.Remove(roomID);
+            SendClientList();
+        }
+        else
+            Debug.LogWarning("Match information corrupt, cant start match");
+    }
+
+    public void MatchEnded(Guid roomID)
+    {
+        
+    }
+
 
     #endregion
 
@@ -360,6 +490,8 @@ public class RoomManager : MonoBehaviour
     #region Room View
     public void InitializeRoomView(Room room, bool forOwner, PlayerStruct[] participants = null)
     {
+        ResetRoomView();
+
         UtilityClass.LogMessages(true, 
             "Client: Initializing Room View",
             $"Client Room Setttings: {room.roomName}, {room.roomId}, {room.gameMode}, {room.gridSize}",
@@ -391,6 +523,11 @@ public class RoomManager : MonoBehaviour
         if (_isRoomOwner)
         {
             _startGameButton = Instantiate(_startButtonPrefab, _buttonContainer).GetComponent<Button>();
+            _startGameButton.onClick.AddListener(() =>
+            {
+                if (_startGameButton.interactable)
+                    OnClientRoomStartMatch();
+            });
         }
 
         ToggleSettingsButtonInteractability(_isRoomOwner);
@@ -495,26 +632,32 @@ public class RoomManager : MonoBehaviour
     public void OnClientLeaveRoom()
     {
         UtilityClass.LogMessages("Client leaving room");
+
+        ResetRoomView();
+        _canvasController.ShowScreen(OnlineScreens.RoomListing);
+    }
+
+    [ClientCallback]
+    public void ResetRoomView()
+    {
         // reset room view
         _localRoom = new Room();
         _isRoomOwner = false;
 
         foreach (var slot in _slots)
-            if(slot.gameObject != null)
+            if (slot != null && slot.gameObject != null)
                 Destroy(slot.gameObject);
 
         SlotScript.ResetStaticStats();
 
-        if(_startGameButton != null)
+        if (_startGameButton != null)
             Destroy(_startGameButton.gameObject);
-        
-        if(_roomInfoButton != null)
+
+        if (_roomInfoButton != null)
             Destroy(_roomInfoButton.gameObject);
 
         _startGameButton = null;
         _roomInfoButton = null;
-
-        _canvasController.ShowScreen(OnlineScreens.RoomListing);
     }
 
     public void UpdateStartButtonAvailability()
@@ -563,7 +706,7 @@ public class RoomManager : MonoBehaviour
 
     public void OnClientRoomStartMatch()
     {
-
+        _messageHandler.SendRoomMessageToServer(ServerRoomOperation.Start, null, _localRoom.roomId);
     }
 
     #endregion

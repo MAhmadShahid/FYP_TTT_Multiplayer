@@ -55,6 +55,12 @@ public class StageManager : MonoBehaviour
     }
 
     [ClientCallback]
+    public void CleanUpStageVisuals()
+    {
+        Destroy(_currentStageObject);
+    }
+
+    [ClientCallback]
     public void CreateCellLogic()
     {
         _cellParent = _currentStageObject.GetComponentInChildren<CellContainer>().gameObject;

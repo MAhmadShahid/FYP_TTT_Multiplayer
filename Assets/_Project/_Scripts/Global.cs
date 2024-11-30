@@ -278,7 +278,8 @@ namespace TicTacToe
         SettingChange,
         Join,
         Leave,
-        Kick
+        Kick,
+        Start
     }
 
     #endregion
@@ -296,6 +297,7 @@ namespace TicTacToe
     [Serializable]
     public struct MatchInfo
     {
+        public Guid matchID;
         public string name;
         public GameMode mode;
         public int gridSize;
