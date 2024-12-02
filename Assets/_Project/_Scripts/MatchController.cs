@@ -14,12 +14,16 @@ public class MatchController : NetworkBehaviour
     internal readonly SyncList<NetworkIdentity> playerTurnQueue = new SyncList<NetworkIdentity>();
     internal readonly SyncDictionary<NetworkIdentity, PlayerStruct> matchPlayers = new SyncDictionary<NetworkIdentity, PlayerStruct>();
     
+    // a local queue implementation
+    public List<NetworkIdentity> localQueue = new List<NetworkIdentity>();
+
     // mapping for ease
     public Dictionary<NetworkIdentity, NetworkConnectionToClient> connectionIdentityMapping = new Dictionary<NetworkIdentity, NetworkConnectionToClient>();
 
     public NetworkIdentity roomOwner;
 
     // local variables
+    bool rematch = true;
     public Dictionary<int, NetworkIdentity> cellOwners = new Dictionary<int, NetworkIdentity>();
 
     // events that define different behaviour depending upon where called from
@@ -53,7 +57,6 @@ public class MatchController : NetworkBehaviour
         UtilityClass.LogMessages("Start function code");
     }
      
-    #region Mirror Callbacks
 
     [ServerCallback]
     public override void OnStartServer()
@@ -62,15 +65,20 @@ public class MatchController : NetworkBehaviour
         base.OnStartServer();
     }
 
+    #region Client Side Setup
 
     public override void OnStartClient()
     {
+        AssignClientHandlers();
+        RequestQueueList();
+
         _uiManager.matchInfo = matchInfo;
         _stageManager.matchInfo = matchInfo;
 
         UtilityClass.LogMessages("MatchController: OnStartClient");
         UtilityClass.LogMessages($"MatchInfo: {matchInfo.name}\n Mode: {matchInfo.mode}\n");
         UtilityClass.LogMessages($"GridSize: {matchInfo.gridSize}\nPlayerCount: {matchInfo.playerCount}");
+
 
         _canvasController = FindObjectOfType<CanvasController>();
         if (_canvasController != null)
@@ -79,6 +87,16 @@ public class MatchController : NetworkBehaviour
         SetupClientSide();
     }
 
+    public void AssignClientHandlers()
+    {
+        matchPlayers.OnRemove += OnClientPlayerLeave;
+    }
+
+    public void RemoveClientHandlers()
+    {
+        matchPlayers.OnRemove -= OnClientPlayerLeave;
+    }
+    
     [ClientCallback]
     public void SetupClientSide()
     {
@@ -91,59 +109,103 @@ public class MatchController : NetworkBehaviour
         _stageManager.OnStartClient();
     }
 
+
+    [Command(requiresAuthority = false)]
+    public void RequestQueueList(NetworkConnectionToClient requestingClient = null)
+    {
+        if (requestingClient != null)
+            OnClientRecieveQueueList(requestingClient, localQueue.ToArray());
+
+    }
+
+    [TargetRpc]
+    public void OnClientRecieveQueueList(NetworkConnectionToClient targetClient, NetworkIdentity[] queue)
+    {
+        foreach(var item in queue)
+            localQueue.Add(item);
+
+        _uiManager.SetupMatchUI();
+    }
+
     #endregion
+
 
     #region Disconnect Logic
 
     [ServerCallback]
-    // the main match controller player removal function
-    public void OnPlayerDisconnects(NetworkConnectionToClient playerConnection)
+    public IEnumerator OnServerPlayerLeave(NetworkConnectionToClient playerConnection)
     {
-        
         NetworkIdentity playerIdentity = null;
 
         foreach (var identity in matchPlayers.Keys)
-            if (connectionIdentityMapping[identity] == playerConnection)
+            if (identity.connectionToClient == playerConnection)
                 playerIdentity = identity;
-
 
         if (playerIdentity != null)
         {
-            UtilityClass.LogMessages("Player to kick found");
+            Debug.Log("Player found");
+            int playerQueueIndex = GetIdentitiesIndexFromList(playerIdentity);
+            matchPlayers.Remove(playerIdentity); // remove player -> replicate -> all clients handle what to do
+            localQueue.Remove(playerIdentity);
 
-            // update data structures and replicate on clients
-            var playerIndex = GetIdentitiesIndexFromList(currentPlayer);
-            matchPlayers.Remove(playerIdentity);
-            playerTurnQueue.Remove(playerIdentity);
+            // update current player
+            if(currentPlayer == playerIdentity)
+                currentPlayer = localQueue[playerQueueIndex % localQueue.Count];
 
-            // update leaving client
-            TargetRPC_EndMatch(playerConnection);
-
-            // wrap player object for this client
-            NetworkServer.RemovePlayerForConnection(playerConnection, RemovePlayerOptions.Destroy);            
-
-            if (playerTurnQueue.Count == 1)
-            {
-                UtilityClass.LogMessages("Match doesn't have enough players, wrapping up");
+            if (localQueue.Count == 1)
                 WrapMatchUp(GameStatus.Forfeit, playerIdentity);
-                return;
-            }
 
-            if (currentPlayer == playerIdentity)
-                currentPlayer = playerTurnQueue[playerIndex];
-
-            // update other clients
-            foreach (var identity in matchPlayers.Keys)
-                RPC_PlayerLeft(identity.connectionToClient, playerIndex);
+            // wait for client to recieve handling messages
+            yield return null;
+            NetworkServer.RemovePlayerForConnection(playerConnection, RemovePlayerOptions.Destroy);
         }
         else
+        {
+            
             UtilityClass.LogMessages("Player to kick NOT FOUND");
+        }
+            
+
     }
+
+    [ClientCallback]
+    public void OnClientPlayerLeave(NetworkIdentity playerIdentity, PlayerStruct playerStruct)
+    {
+        // if player leaving is local player
+        if(playerIdentity.isLocalPlayer)
+        {
+            RemoveClientHandlers();
+            OnClientEndMatch();
+        }
+        else
+        {
+            // update ui
+            int playerRemovingIndex = GetIdentitiesIndexFromList(playerIdentity);
+            localQueue.Remove(playerIdentity);
+            _uiManager.OnPlayerLeft(playerRemovingIndex % localQueue.Count);
+        }
+    }
+
+    [ClientCallback]
+    public void OnClientEndMatch()
+    {
+        _stageManager.CleanUpStageVisuals();
+        _canvasController.gameObject.SetActive(true);
+        gameObject.SetActive(false);
+    }
+
+    [ServerCallback]
+    public void OnServerPlayerDisconnects(NetworkConnectionToClient playerDisconnected)
+    {
+        StartCoroutine(OnServerPlayerLeave(playerDisconnected));
+    }
+
 
     [Command(requiresAuthority = false)]
     public void CommandRequestToLeave(NetworkConnectionToClient player = null)
     {
         // lobby or room manager defines these events
+        Debug.Log("Player requested to leave");
         OnPlayerLeave?.Invoke(matchInfo.matchID, player);
     }
 
@@ -154,13 +216,6 @@ public class MatchController : NetworkBehaviour
             Debug.Log(player.name);
 
         _uiManager.OnPlayerLeft(currentPlayerIndex);
-    }
-
-
-    [ServerCallback]
-    public void WrapPlayerObject(NetworkIdentity playerIdentity)
-    {
-
     }
     #endregion
 
@@ -186,7 +241,7 @@ public class MatchController : NetworkBehaviour
         else
         {
             int playerIndexInList = GetIdentitiesIndexFromList(currentPlayer);
-            currentPlayer = playerTurnQueue[(playerIndexInList + 1) % playerTurnQueue.Count];
+            currentPlayer = localQueue[(playerIndexInList + 1) % localQueue.Count];
         }
 
     }
@@ -198,7 +253,7 @@ public class MatchController : NetworkBehaviour
         {
             case GameStatus.Won:
                 RPC_ShowWinner(player);
-                StartCoroutine(ServerEndMatch(0));
+                // StartCoroutine(ServerEndMatch(0));
                 break;
             case GameStatus.Draw:
                 RPC_ShowDraw();
@@ -209,13 +264,11 @@ public class MatchController : NetworkBehaviour
                 break;
         }
         
+        if(status != GameStatus.Forfeit)
+        // implement counter
+        {
 
-    }
-
-    [ServerCallback]
-    public void CleanUpPlayer(NetworkConnectionToClient player = null)
-    {
-
+        }
     }
 
     [ServerCallback]
@@ -227,27 +280,17 @@ public class MatchController : NetworkBehaviour
         
         yield return new WaitForSeconds(0.1f); // and wait for it.
 
-        OnMatchEnd?.Invoke(matchInfo.matchID);
-
         foreach(var playerIdentity in matchPlayers.Keys)
         {
             NetworkConnectionToClient conn = playerIdentity.connectionToClient;
-            NetworkServer.RemovePlayerForConnection(conn, RemovePlayerOptions.Destroy);
-
-            // add server end match for room as well.
-            // change player status for the lobby they came from
-
-            if(matchInfo.lobby == Lobby.QuickLobby)
-            {
-                PlayerInfo playerInfo = LobbyManager._lobby[conn];
-                playerInfo.playerState = PlayerState.QuickJoinLobby;
-                LobbyManager._lobby[conn] = playerInfo;
-                PlayerManager.RemovePlayerFromLobby(conn);
-            }
+            
+            if(conn != null)
+                NetworkServer.RemovePlayerForConnection(conn, RemovePlayerOptions.Destroy);
         }
 
         yield return null;
-        Debug.Log("Destroying match controller on server");
+
+        OnMatchEnd?.Invoke(matchInfo.matchID);
         NetworkServer.Destroy(gameObject);
     }
 
@@ -256,9 +299,7 @@ public class MatchController : NetworkBehaviour
     {
         UtilityClass.LogMessages("Ending match on client side");
 
-        _stageManager.CleanUpStageVisuals();
-        // _canvasController.InitializeCanvasOnline();
-        _canvasController.gameObject.SetActive(true);  
+        OnClientEndMatch();
     }
 
     [TargetRpc]
@@ -266,6 +307,8 @@ public class MatchController : NetworkBehaviour
     {
         _canvasController.InitializeCanvasOnline();
         _canvasController.gameObject.SetActive(true);
+
+        _stageManager.CleanUpStageVisuals();
         // gameObject.SetActive(false);
         Destroy(gameObject);
     }
@@ -284,8 +327,8 @@ public class MatchController : NetworkBehaviour
         _uiManager.ShowWinnerScreen(player);
         Debug.Log($"Winner: {player.name}");
 
-        _rematchButton.interactable = true;
-        _rematchButton.gameObject.SetActive(true);
+        //_rematchButton.interactable = true;
+        //_rematchButton.gameObject.SetActive(true);
 
         _returnButton.interactable = true;
         _returnButton.gameObject.SetActive(true);
@@ -301,6 +344,7 @@ public class MatchController : NetworkBehaviour
 
         _returnButton.interactable = true;
         _returnButton.gameObject.SetActive(true);
+
     }
 
     [ClientRpc]
@@ -309,12 +353,6 @@ public class MatchController : NetworkBehaviour
         UtilityClass.LogMessages($"Player forfeited: isLocalPlayer");
     }
 
-
-    [ClientRpc]
-    public void RPC_OnPlayerDisconnected()
-    {
-
-    }
     #endregion
 
     #region Server Callbacks
@@ -323,16 +361,16 @@ public class MatchController : NetworkBehaviour
     public void ShuffleList()
     {
         System.Random rand = new System.Random();
-        int itemCount = playerTurnQueue.Count;
+        int itemCount = localQueue.Count;
 
         while (itemCount > 0)
         {
             itemCount--;
             int randomNumber = rand.Next(itemCount + 1);
 
-            var temp = playerTurnQueue[randomNumber];
-            playerTurnQueue[randomNumber] = playerTurnQueue[itemCount];
-            playerTurnQueue[itemCount] = temp;
+            var temp = localQueue[randomNumber];
+            localQueue[randomNumber] = localQueue[itemCount];
+            localQueue[itemCount] = temp;
         }
     }
 
@@ -451,7 +489,6 @@ public class MatchController : NetworkBehaviour
     [ClientCallback]
     public void OnCurrentPlayerChanged(NetworkIdentity _, NetworkIdentity newPlayerIdentity)
     {
-        UtilityClass.LogMessages("Current Player Changed");
         int playerIndex = GetIdentitiesIndexFromList(newPlayerIdentity);
         _uiManager.UpdatePlayerTurnUI(playerIndex);
     }
@@ -462,8 +499,8 @@ public class MatchController : NetworkBehaviour
     // Helping functions
     public int GetIdentitiesIndexFromList(NetworkIdentity playerIdentity)
     {
-        for(int playerIndex = 0; playerIndex < playerTurnQueue.Count; playerIndex++)
-            if (playerTurnQueue[playerIndex] == playerIdentity)
+        for(int playerIndex = 0; playerIndex < localQueue.Count; playerIndex++)
+            if (localQueue[playerIndex] == playerIdentity)
                 return playerIndex;
         
         return -1;

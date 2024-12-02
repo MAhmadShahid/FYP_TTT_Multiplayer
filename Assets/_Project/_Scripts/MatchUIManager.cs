@@ -49,7 +49,6 @@ public class MatchUIManager : MonoBehaviour
         gameObject.SetActive(true);
         ShowScreen(MATCH_MAKED);
         yield return new WaitForSeconds(_transitionTime);
-        UtilityClass.LogMessages("Blah blah");
         ShowScreen(MATCH_UI);
     }
 
@@ -77,7 +76,6 @@ public class MatchUIManager : MonoBehaviour
                 _topPanel.SetActive(true);
                 _matchUIScreen.SetActive(true);
                 ResetMatchmakingScreen();
-                SetupMatchUI();
                 break;
         }
     }
@@ -135,13 +133,13 @@ public class MatchUIManager : MonoBehaviour
         for (int count = 0; count < matchPlayerCardScripts.Count; count++)
         {
             Debug.Log($"Loop count: {count}, currentPlayerIndex: {currentPlayerIndex}");
-            var playerIdentity = _matchController.playerTurnQueue[currentPlayerIndex];
+            var playerIdentity = _matchController.localQueue[currentPlayerIndex];
             var player = _matchController.matchPlayers[playerIdentity];
             var cardScript = matchPlayerCardScripts[count];
 
             cardScript.UpdateMatchCard(player.name, null, false);
 
-            currentPlayerIndex = (currentPlayerIndex + 1) % _matchController.playerTurnQueue.Count;
+            currentPlayerIndex = (currentPlayerIndex + 1) % _matchController.localQueue.Count;
         }
 
         _yourTurnObject.SetActive(_matchController.currentPlayer.isLocalPlayer);
@@ -149,7 +147,9 @@ public class MatchUIManager : MonoBehaviour
 
     public void OnPlayerLeft(int currentPlayerIndex)
     {
+        Debug.Log($"Current Player Index: {currentPlayerIndex}");
         int count = _matchController.matchPlayers.Count;
+        Debug.Log($"Match Players Count: {count}");
         Destroy(matchPlayerCardScripts[count - 1].gameObject);
         matchPlayerCardScripts.RemoveAt(count - 1);
 
@@ -169,6 +169,7 @@ public class MatchUIManager : MonoBehaviour
 
     public void OnLeaveButtonPressed()
     {
+        Debug.Log("Player pressed leave");
         _matchController.CommandRequestToLeave();
     }
 

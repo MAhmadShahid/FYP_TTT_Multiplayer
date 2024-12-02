@@ -243,7 +243,34 @@ public class LobbyManager : MonoBehaviour
         NetworkServer.Spawn(matchControllerObject);
         // updating current player
         matchController.currentPlayer = matchController.playerTurnQueue[0];
-        _instance.OnPlayerDisconnected += matchController.OnPlayerDisconnects;
+        _instance.OnPlayerDisconnected += matchController.OnServerPlayerDisconnects;
+
+        matchController.OnMatchEnd += (matchID) =>
+        {
+            _instance.OnPlayerDisconnected -= matchController.OnServerPlayerDisconnects;
+
+            foreach (var player in matchController.matchPlayers.Keys)
+            {
+                PlayerInfo playerInfo = _lobby[player.connectionToClient];
+                playerInfo.playerState = PlayerState.QuickJoinLobby;
+                LobbyManager._lobby[player.connectionToClient] = playerInfo;
+                PlayerManager.RemovePlayerFromLobby(player.connectionToClient);
+
+                player.connectionToClient.Send(new ClientMatchMessage { clientSideOperation = ClientMatchOperation.Reset });
+            }
+        };
+
+        matchController.OnPlayerLeave += (matchID, clientConnection) =>
+        {
+
+            StartCoroutine(matchController.OnServerPlayerLeave(clientConnection));
+
+            PlayerInfo playerInfo = _lobby[clientConnection];
+            playerInfo.playerState = PlayerState.QuickJoinLobby;
+            LobbyManager._lobby[clientConnection] = playerInfo;
+            PlayerManager.RemovePlayerFromLobby(clientConnection);
+
+        };
 
         // Testing spawn
         //GameObject matchSpecificObject = Instantiate(_demoMarker);

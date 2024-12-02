@@ -330,7 +330,7 @@ public class RoomManager : MonoBehaviour
 
             matchControllerScript.matchInfo = matchInfo;
             matchControllerObject.GetComponent<NetworkMatch>().matchId = roomID;
-            OnPlayerDisconnected += matchControllerScript.OnPlayerDisconnects;
+            OnPlayerDisconnected += matchControllerScript.OnServerPlayerDisconnects;
 
             List<PlayerStruct> list = new List<PlayerStruct>();
 
@@ -348,6 +348,7 @@ public class RoomManager : MonoBehaviour
                 // populate match controller fields
                 matchControllerScript.matchPlayers.Add(playerIdentity, player);
                 matchControllerScript.playerTurnQueue.Add(playerIdentity);
+                matchControllerScript.localQueue.Add(playerIdentity);
                 matchControllerScript.connectionIdentityMapping.Add(playerIdentity, client);
 
                 // if room owner then
@@ -365,10 +366,7 @@ public class RoomManager : MonoBehaviour
             matchControllerScript.OnMatchEnd += (roomid) => {
                 Debug.Log($"Match ended for room: {roomid}");
 
-                OnPlayerDisconnected -= matchControllerScript.OnPlayerDisconnects;
-
-                // update open rooms for all clients
-                _openRooms.Add(roomID, room);
+                OnPlayerDisconnected -= matchControllerScript.OnServerPlayerDisconnects;
 
                 // send all clients back to room
                 Room[] roomArray = { room };
@@ -381,7 +379,10 @@ public class RoomManager : MonoBehaviour
                         player.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Joined, roomsInfo = roomArray });
                 }
 
-                SendUpdatedRoomInfo(roomid);
+
+                // update open rooms for all clients
+                _openRooms.Add(roomID, room);
+                SendUpdatedRoomInfo(roomID);
                 SendClientList();
             };
 
@@ -390,18 +391,27 @@ public class RoomManager : MonoBehaviour
             {
                 if (_playersRoom.ContainsKey(clientConnection) && _playersRoom[clientConnection] == roomID)
                 {
+                    Debug.Log("OnPlayerLeave: Room owner leaving");
                     StartCoroutine(matchControllerScript.ServerEndMatch(0));
                     return;
                 }
 
-                matchControllerScript.OnPlayerDisconnects(clientConnection);
+                Debug.Log("OnPlayerLeave: Other player leaving");
+
+                StartCoroutine(matchControllerScript.OnServerPlayerLeave(clientConnection));
 
                 // update lobby data structures and room info
                 OnServerRemovePlayerFromRoom(clientConnection);
                 _roomConnections[roomID].Remove(clientConnection);
-                room.currentPlayerCount--;
 
-                clientConnection.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Left });
+                if(!_openRooms.ContainsKey(roomID))
+                {
+                    Debug.Log("OpenRooms doesn't have room. updating count here");
+                    room.currentPlayerCount--;
+                    Debug.Log($"Current player count: {room.currentPlayerCount}");
+                    clientConnection.Send(new ClientRoomMessage { roomOperation = ClientRoomOperation.Left });
+                }
+                    
             };
 
             // update all clients for open rooms
