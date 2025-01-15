@@ -237,6 +237,7 @@ public class LobbyManager : MonoBehaviour
             matchController.connectionIdentityMapping.Add(player.Key, connectionIdentityMapping[player.Key]);
         }
 
+        matchController.SetupMatchParameters();
         matchController.ShuffleList();
 
         // spawning on client side after data is loaded

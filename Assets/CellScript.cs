@@ -10,7 +10,7 @@ public class CellScript : MonoBehaviour
     public void OnCellTouched()
     {
         if (matchController.currentPlayer != null && matchController.currentPlayer.isLocalPlayer)
-            matchController?.CommandMakePlay(cellValue);
+            matchController?.CommandMakePlay_NewRule(cellValue);
     }
 
 }

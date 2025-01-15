@@ -19,6 +19,8 @@ public class MyNetworkManager : NetworkManager
     [SerializeField]
     TextMeshProUGUI _addressText;
 
+    public ConnectionMode connectionMode;
+
     #region Start & Stop Callbacks
 
     public override void Awake()
@@ -93,12 +95,27 @@ public class MyNetworkManager : NetworkManager
         _canvasController.OnClientConnect();
     }
 
-    public void InitiateConnectionFromClient()
+    public void InitiateOnlineConnectionFromClient()
     {
         if (mode == NetworkManagerMode.ServerOnly)
             return;
 
+        networkAddress = "103.31.104.181";
+        connectionMode = ConnectionMode.Online;
+
         StartClient();
+        _canvasController.InitiateConnectionFromClient();
+    }
+
+    public void InitiateOfflineConnectionFromClient()
+    {
+        if (mode == NetworkManagerMode.ServerOnly)
+            return;
+
+        networkAddress = "localhost";
+        connectionMode = ConnectionMode.Local;
+
+        StartHost();
         _canvasController.InitiateConnectionFromClient();
     }
 

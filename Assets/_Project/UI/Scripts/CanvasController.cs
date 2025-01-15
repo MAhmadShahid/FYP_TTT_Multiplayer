@@ -11,7 +11,8 @@ namespace TicTacToe
     public class CanvasController : MonoBehaviour
     {
         public bool uiTesting;
-        
+
+        [SerializeField] MyNetworkManager myNetworkManager;
         [SerializeField] MessageHandler _messageHandler;
         [SerializeField] RoomManager _roomManager;
 
@@ -33,6 +34,7 @@ namespace TicTacToe
         [SerializeField] TextMeshProUGUI _userName;
         [SerializeField] GameModeSelectionScript _modeSelection;
         [SerializeField] TierSelectionScript _tierSelection;
+        [SerializeField] AdvanceSettingsScript _advancedSettings;
 
         [Header("Testing Prefabs")]
         [SerializeField] GameObject _playerSlot;
@@ -57,6 +59,15 @@ namespace TicTacToe
             _gridTier = GridTier.None;
 
             ShowScreen(OnlineScreens.OnlineLobby);
+        }
+
+        public void InitializeCanvasOfflineNew()
+        {
+            // resetting all states
+            _gameMode = GameMode.None;
+            _gridTier = GridTier.None;
+
+            ShowScreen(OnlineScreens.OfflineLobby);
         }
 
         public void ShowScreen(OnlineScreens screenName)
@@ -170,6 +181,37 @@ namespace TicTacToe
 
         #endregion
 
+        #region Offline Lobby Screen
+
+        public void OnStartOfflineGame(int gridSize, int participants)
+        {
+            Debug.Log($"Starting offline game, {gridSize} | {participants}");
+        }
+
+        public void OnClassicModeSelected()
+        {
+            _gameMode = GameMode.Classic;
+            _advancedSettings.IntializeAdvanceSettings(
+                OnStartOfflineGame,
+                _gameMode,
+                OnlineScreens.OfflineLobby
+            );
+        }
+
+        public void OnBlitzModeSelected()
+        {
+            _gameMode = GameMode.Blitz;
+
+            _advancedSettings.IntializeAdvanceSettings(
+                OnStartOfflineGame,
+                _gameMode,
+                OnlineScreens.OfflineLobby
+            ); 
+        }
+
+
+        #endregion
+
         public void PlayerRemovedFromLobby()
         {
             InitializeCanvasOnline();
@@ -184,7 +226,10 @@ namespace TicTacToe
 
         public void OnClientConnect()
         {
-            InitializeCanvasOnline();
+            if(myNetworkManager.connectionMode == ConnectionMode.Online)
+                InitializeCanvasOnline();
+            else
+                InitializeCanvasOfflineNew();
         }
 
         public void OnClientDisconnect()

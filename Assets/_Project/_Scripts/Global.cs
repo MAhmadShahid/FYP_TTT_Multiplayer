@@ -47,8 +47,18 @@ namespace TicTacToe
     }
 
 
-#region General
-[System.Serializable]
+    #region General
+
+    [System.Serializable]
+    public enum ConnectionMode
+    {
+        Local,
+        Online
+    }
+
+
+
+    [System.Serializable]
     public enum GameMode
     {
         None,
@@ -157,7 +167,8 @@ namespace TicTacToe
         RoomListing,
         RoomView,
         Connecting,
-        AdvanceSettings
+        AdvanceSettings,
+        OfflineLobby 
     }
 
     #endregion

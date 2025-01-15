@@ -356,6 +356,7 @@ public class RoomManager : MonoBehaviour
                     matchControllerScript.roomOwner = playerIdentity;
             }
 
+            matchControllerScript.SetupMatchParameters();
             matchControllerScript.ShuffleList();
             matchControllerScript.currentPlayer = matchControllerScript.playerTurnQueue[0];
 

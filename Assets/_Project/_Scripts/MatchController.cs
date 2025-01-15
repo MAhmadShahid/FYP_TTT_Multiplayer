@@ -16,6 +16,9 @@ public class MatchController : NetworkBehaviour
     
     // a local queue implementation
     public List<NetworkIdentity> localQueue = new List<NetworkIdentity>();
+    public Dictionary<NetworkIdentity, int> playerScores = new Dictionary<NetworkIdentity, int>();
+    public Dictionary<NetworkIdentity, List<List<int>>> playerPairs = new Dictionary<NetworkIdentity, List<List<int>>>();
+    public Dictionary<int, bool> cellChecked = new Dictionary<int, bool>();
 
     // mapping for ease
     public Dictionary<NetworkIdentity, NetworkConnectionToClient> connectionIdentityMapping = new Dictionary<NetworkIdentity, NetworkConnectionToClient>();
@@ -63,6 +66,16 @@ public class MatchController : NetworkBehaviour
     {
         UtilityClass.LogMessages("MatchController: OnStartServer");
         base.OnStartServer();
+    }
+
+    [ServerCallback]
+    public void SetupMatchParameters()
+    {
+        localQueue.ForEach(player =>
+        {
+            playerScores.Add(player, 0);
+            playerPairs.Add(player, new List<List<int>>());
+        });
     }
 
     #region Client Side Setup
@@ -244,6 +257,172 @@ public class MatchController : NetworkBehaviour
             currentPlayer = localQueue[(playerIndexInList + 1) % localQueue.Count];
         }
 
+    }
+
+    [Command(requiresAuthority = false)]
+    public void CommandMakePlay_NewRule(int cellValue, NetworkConnectionToClient playedBy = null)
+    {
+        if (currentPlayer != playedBy.identity || cellOwners.ContainsKey(cellValue))
+            return;
+
+        cellOwners[cellValue] = currentPlayer;
+        RPC_UpdateClientBoardState(cellValue, playedBy.identity);
+
+        //if (CheckWin(cellValue, playedBy.identity))
+        //    WrapMatchUp(GameStatus.Won, currentPlayer);
+        // if the board is full
+        if (cellOwners.Keys.Count == matchInfo.gridSize * matchInfo.gridSize)
+        {
+            CalculateWins();
+            WrapMatchUp(GameStatus.Draw); 
+        }
+        else
+        {
+            int playerIndexInList = GetIdentitiesIndexFromList(currentPlayer);
+            currentPlayer = localQueue[(playerIndexInList + 1) % localQueue.Count];
+        }
+
+    }
+
+    [ServerCallback]
+    public void CheckWinner()
+    {
+        int currentScore = 0;
+
+        foreach (var state in playerScores)
+        {
+            if (state.Value >= currentScore)
+                currentScore = state.Value;
+
+            Debug.Log($"{state.Key}: {state.Value}");
+        }
+
+        List<NetworkIdentity> winners = new List<NetworkIdentity>();
+        foreach (var state in playerScores)
+        {
+            if (state.Value == currentScore)
+                winners.Add(state.Key);
+        }
+
+        if (winners.Count == 1)
+        {
+            Debug.Log($"Winner is: {winners[0]}");
+            WrapMatchUp(GameStatus.Won, winners[0]);
+        }
+        else
+        {
+            Debug.Log("Draw between:");
+            WrapMatchUp(GameStatus.Draw);
+        }
+
+        foreach (var pair in playerPairs)
+        {
+            foreach (var list in pair.Value)
+            {
+                list.ForEach(x => Debug.Log(x));
+                Debug.Log("");
+            }
+        }
+    }
+
+
+    [ServerCallback]
+    public void CalculateWins()
+    {
+        for (int cellIndex = 0; cellIndex < matchInfo.gridSize * matchInfo.gridSize; cellIndex++)
+            CheckWin_NewRule(cellIndex);
+    }
+
+    [ServerCallback]
+    public bool CheckWin_NewRule(int cellValue)
+    {
+        NetworkIdentity currentPlayer = cellOwners[cellValue];
+
+        Tuple<Tuple<int, int>, Tuple<int, int>> horizontalRule = new Tuple<Tuple<int, int>, Tuple<int, int>>(
+        new Tuple<int, int>(0, -1),        // Left = { Row = 0, Column = -1 }
+        new Tuple<int, int>(0, 1)          // Right = { Row = 0, Column = 1 }
+        );
+
+
+        // Tuple<int, int> horizontalRule = new Tuple<int, int>( -1, 1 );
+        Tuple<Tuple<int, int>, Tuple<int, int>> verticalRule = new Tuple<Tuple<int, int>, Tuple<int, int>>(
+            new Tuple<int, int>(-1, 0),        // Left = { Row = 0, Column = -1 }
+            new Tuple<int, int>(1, 0)          // Right = { Row = 0, Column = 1 }
+        );
+
+        Tuple<Tuple<int, int>, Tuple<int, int>> diagonalRule1 = new Tuple<Tuple<int, int>, Tuple<int, int>>(
+            new Tuple<int, int>(-1, -1),        // Left = { Row = 0, Column = -1 }
+            new Tuple<int, int>(1, 1)          // Right = { Row = 0, Column = 1 }
+        );
+
+        Tuple<Tuple<int, int>, Tuple<int, int>> diagonalRule2 = new Tuple<Tuple<int, int>, Tuple<int, int>>(
+            new Tuple<int, int>(-1, 1),        // Left = { Row = 0, Column = -1 }
+            new Tuple<int, int>(1, -1)          // Right = { Row = 0, Column = 1 }
+        );
+
+        return CheckWinCondition_NewRule(currentPlayer, cellValue, horizontalRule, "Horizontal") ||
+                    CheckWinCondition_NewRule(currentPlayer, cellValue, verticalRule, "Vertical") ||
+                    CheckWinCondition_NewRule(currentPlayer, cellValue, diagonalRule1, "Diagonal1") ||
+                    CheckWinCondition_NewRule(currentPlayer, cellValue, diagonalRule2, "Diagonal2");
+    }
+
+    [ServerCallback]
+    bool CheckWinCondition_NewRule(NetworkIdentity player, int currentCellMarked, Tuple<Tuple<int, int>, Tuple<int, int>> ruling, string rulingType)
+    {
+
+        if (cellChecked.ContainsKey(currentCellMarked)) return false;
+
+        int currentRow = currentCellMarked / matchInfo.gridSize;
+        int startingColumn = currentCellMarked % matchInfo.gridSize;
+
+
+        // check horizontal rule
+        bool left = true, right = true;
+        Tuple<int, int> leftRule = ruling.Item1;
+        Tuple<int, int> rightRule = ruling.Item2;
+
+        int leftRowCounter = leftRule.Item1, leftColumnCounter = leftRule.Item2;
+        int rightRowCounter = rightRule.Item1, rightColumnCounter = rightRule.Item2;
+
+
+        // check for left cell
+        int leftCellColumn = startingColumn + leftColumnCounter;
+        int leftCellRow = currentRow + leftRowCounter;
+        int leftCellValue = -1;
+        if (leftCellColumn >= 0 && leftCellRow >= 0)
+        {
+            leftCellValue = GetCellValue(leftCellRow, leftCellColumn);
+            left = cellOwners.ContainsKey(leftCellValue) && cellOwners[leftCellValue] == player && !cellChecked.ContainsKey(leftCellValue);
+        }
+        else
+            left = false;
+
+        // check for right cell
+        int rightCellColumn = startingColumn + rightColumnCounter;
+        int rightCellRow = currentRow + rightRowCounter;
+        int rightCellValue = -1;
+        if (rightCellColumn < matchInfo.gridSize && rightCellRow < matchInfo.gridSize)
+        {
+            rightCellValue = GetCellValue(rightCellRow, rightCellColumn);
+            right = cellOwners.ContainsKey(rightCellValue) && cellOwners[rightCellValue] == player && !cellChecked.ContainsKey(rightCellValue);
+        }
+        else
+            right = false;
+
+        Debug.Log($"Current Row: {currentRow}; Column: {startingColumn}");
+        Debug.Log($"{left} {right}");
+
+        if (left && right)
+        {
+            cellChecked[leftCellValue] = true; cellChecked[rightCellValue] = true; cellChecked[currentCellMarked] = true;
+
+            List<int> currentPair = new List<int> { leftCellValue, currentCellMarked, rightCellValue };
+            playerPairs[player].Add(currentPair);
+            playerScores[player]++;
+            return true;
+        }
+
+        return false;
     }
 
     [ServerCallback]
